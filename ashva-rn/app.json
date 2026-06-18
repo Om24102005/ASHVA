@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "ASHVA",
+    "slug": "ashva-rn",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "ashva",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#17110D",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ashva.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ASHVA uses the camera to capture your KYC documents.",
+        "NSPhotoLibraryUsageDescription": "ASHVA needs photo access to upload your KYC documents."
+      }
+    },
+    "android": {
+      "package": "com.ashva.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#17110D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": ["expo-camera"],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

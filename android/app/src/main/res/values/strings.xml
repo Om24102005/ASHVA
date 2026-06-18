@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ASHVA</string>
+    <string name="title_activity_main">ASHVA</string>
+    <string name="package_name">com.ashva.app</string>
+    <string name="custom_url_scheme">com.ashva.app</string>
+</resources>

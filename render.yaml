@@ -1,0 +1,75 @@
+# ASHVA — Render Blueprint. Provisions the API (Docker) + managed Postgres.
+# Deploy: Render Dashboard → New → Blueprint → connect this repo → Apply.
+# Secrets marked `sync: false` are NOT in git — set them in the Render dashboard.
+databases:
+  - name: ashva-db
+    databaseName: ashva
+    user: ashva
+    plan: free # 30-day free PG; bump to `starter` for persistence
+
+services:
+  - type: web
+    name: ashva-api
+    runtime: docker
+    dockerfilePath: server/api/Dockerfile
+    dockerContext: server/api
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Postgres — wired automatically from the managed DB above.
+      - key: PGHOST
+        fromDatabase: { name: ashva-db, property: host }
+      - key: PGPORT
+        fromDatabase: { name: ashva-db, property: port }
+      - key: PGUSER
+        fromDatabase: { name: ashva-db, property: user }
+      - key: PGPASSWORD
+        fromDatabase: { name: ashva-db, property: password }
+      - key: PGDATABASE
+        fromDatabase: { name: ashva-db, property: database }
+      # Auth — a fresh secret is generated here (also rotates the leaked one).
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_DAYS
+        value: "30"
+      - key: OTP_TTL_SEC
+        value: "300"
+      # ---- Secrets: set these in the Render dashboard (never committed) ----
+      - key: MSG91_AUTHKEY
+        sync: false
+      - key: MSG91_SENDER_ID
+        value: ASHVA
+      - key: MSG91_SMS_TEMPLATE_ID
+        sync: false
+      - key: MSG91_EMAIL_FROM
+        sync: false
+      - key: MSG91_EMAIL_DOMAIN
+        sync: false
+      - key: MSG91_EMAIL_TEMPLATE_ID
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
+      # ---- KYC storage: Cloudflare R2 (S3-compatible) ----
+      - key: S3_ENDPOINT
+        sync: false # e.g. https://<acct>.r2.cloudflarestorage.com
+      - key: S3_PUBLIC_URL
+        sync: false # your R2 public bucket URL (https)
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        value: kyc
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false

@@ -1,0 +1,32 @@
+{
+  "appId": "com.ashva.app",
+  "appName": "ASHVA",
+  "webDir": "www",
+  "backgroundColor": "#17110D",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#17110D"
+  },
+  "android": {
+    "backgroundColor": "#17110D"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#17110D",
+      "launchShowDuration": 3000,
+      "launchAutoHide": false,
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#17110D",
+      "overlaysWebView": true
+    },
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "994367484524-mbck2l7i6656411ki3l0nrtfjq817dev.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": false
+    }
+  }
+}

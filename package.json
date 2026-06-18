@@ -1,0 +1,30 @@
+{
+  "name": "ashva",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ASHVA — pan-India motorcycle & gear rental. Capacitor wrapper around the web prototype (www/) for native iOS + Android.",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap run android",
+    "ios": "cap run ios",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios",
+    "copy": "cap copy",
+    "dev": "live-server www --port=5500 --host=0.0.0.0 --no-browser --wait=200"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/camera": "^6.1.0",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
+    "@msg91comm/sendotp-react-native": "^2.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2",
+    "live-server": "^1.2.2"
+  }
+}

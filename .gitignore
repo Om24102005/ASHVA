@@ -1,0 +1,37 @@
+# deps
+node_modules/
+
+# Capacitor copies www/ into each platform — www/ is the source of truth
+ios/App/App/public/
+android/app/src/main/assets/public/
+
+# iOS
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/*.xcodeproj/xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+
+# misc
+.DS_Store
+*.log
+
+# secrets — NEVER commit (Render reads from GitHub). Keep *.env.example only.
+.env
+*.env
+!*.env.example
+server/.env
+ashva-rn/.env
+
+# RN / Expo
+ashva-rn/node_modules/
+ashva-rn/.expo/
+ashva-rn/dist/
