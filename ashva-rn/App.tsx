@@ -72,7 +72,7 @@ export default function App() {
           tabBarIcon: ({ color, size }) => <Ionicons name={TAB_ICON[route.name]} size={size} color={color} />,
         })}
       >
-        <Tab.Screen name="Home">{({ navigation }: any) => <HomeScreen onSelect={(b) => navigation.navigate('Detail', { bike: b })} />}</Tab.Screen>
+        <Tab.Screen name="Home">{({ navigation }: any) => <HomeScreen onSelect={(b) => navigation.navigate('Detail', { bike: b })} onOpenRoute={(r) => navigation.navigate('Route', { route: r })} />}</Tab.Screen>
         <Tab.Screen name="Routes">{({ navigation }: any) => <RoutesScreen onOpen={(r) => navigation.navigate('Route', { route: r })} />}</Tab.Screen>
         <Tab.Screen name="Bookings">{({ navigation }: any) => <BookingsScreen onOpenTrip={(bk) => navigation.navigate('Trip', { booking: bk })} />}</Tab.Screen>
         <Tab.Screen name="Garage">

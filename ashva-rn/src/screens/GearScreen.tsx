@@ -1,13 +1,80 @@
-/** Booking Step 2 — gear add-ons as toggleable rows with a live ₹ total.
- *  Ported from www/js/screens/gear.js. Presentational: parent owns navigation
- *  and receives the selected gear on Continue. */
+/** Booking Step 2 — gear add-ons grid with a live ₹ total.
+ *  Faithful 1:1 RN port of www/js/screens/gear.js (sharp, editorial, cinematic).
+ *  Two-column grid of toggleable gear cards (icon · name · desc · +₹/day),
+ *  ember selected state with a check badge, and a fixed bottom bar showing the
+ *  item count + running add-on total. Parent owns navigation. */
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import Svg, { Rect, Path, Circle } from 'react-native-svg';
 import { Screen } from '../components/Screen';
 import { Press } from '../components/Press';
-import { C, type, F, radius } from '../theme';
-import { rs, vs, ms } from '../responsive';
+import { Topbar, Progress } from '../components/chrome';
+import { C, F } from '../theme';
+import { rs, vs } from '../responsive';
 import { GEAR } from '../data';
+
+const rupee = (n: number) => '₹' + n.toLocaleString('en-IN');
+
+/** Gear glyphs — faithful port of gear.js gearIcon(). Sun-coloured, 1.6 stroke. */
+function GearIcon({ id }: { id: string }) {
+  const props = {
+    fill: 'none' as const,
+    stroke: C.sun,
+    strokeWidth: 1.6,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  const size = rs(26);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {id === 'cam' && (
+        <>
+          <Rect x={3} y={7} width={13} height={11} rx={1} {...props} />
+          <Path d="M16 10l5-3v10l-5-3z" {...props} />
+        </>
+      )}
+      {id === 'jkt' && (
+        <>
+          <Path d="M8 4l4 3 4-3 4 3-2 3v9H6v-9L4 7z" {...props} />
+          <Path d="M12 7v13" {...props} />
+        </>
+      )}
+      {id === 'comm' && (
+        <>
+          <Path d="M4 13a8 8 0 0116 0M4 13v3a2 2 0 002 2M20 13v3a2 2 0 01-2 2" {...props} />
+          <Circle cx={6} cy={16} r={2} {...props} />
+        </>
+      )}
+      {id === 'boot' && (
+        <>
+          <Path d="M7 3h4v9l7 4v4H7z" {...props} />
+          <Path d="M7 16h11" {...props} />
+        </>
+      )}
+      {id === 'bag' && (
+        <>
+          <Rect x={5} y={8} width={14} height={11} rx={1} {...props} />
+          <Path d="M9 8V6a3 3 0 016 0v2" {...props} />
+        </>
+      )}
+      {id === 'glove' && (
+        <Path
+          d="M7 11V6a1.5 1.5 0 013 0v4M10 10V5a1.5 1.5 0 013 0v5M13 10V6a1.5 1.5 0 013 0v6c0 4-2 7-6 7s-6-3-6-6l1-3"
+          {...props}
+        />
+      )}
+    </Svg>
+  );
+}
+
+/** White check — port of helpers.js check('#fff',14). */
+function Check() {
+  return (
+    <Svg width={rs(14)} height={rs(14)} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M5 12.5l4.5 4.5L19 6" />
+    </Svg>
+  );
+}
 
 export function GearScreen({
   days,
@@ -20,18 +87,17 @@ export function GearScreen({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const toggle = (id: string) => {
+  const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
 
   const chosen = GEAR.filter((g) => selected.has(g.id));
   const perDay = chosen.reduce((sum, g) => sum + g.p, 0);
-  const extra = perDay * days;
+  const extra = perDay * days; // running add-on total: Σ selected p × days
   const count = chosen.length;
 
   const handleContinue = () =>
@@ -39,60 +105,56 @@ export function GearScreen({
 
   return (
     <Screen edges={{ top: true, bottom: false }}>
-      <View style={styles.topbar}>
-        <Press accessibilityLabel="Go back" onPress={onBack} style={styles.back}>
-          <Text style={styles.backArrow}>←</Text>
-        </Press>
-        <Text style={styles.topbarTitle}>GEAR · STEP 2</Text>
-        <View style={styles.back} />
-      </View>
+      <Topbar title="GEAR · STEP 2" onBack={onBack} />
+      <Progress step={1} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* heading block */}
         <View style={styles.head}>
           <Text style={styles.title}>
             Pack for the{'\n'}
             <Text style={styles.titleEm}>mountains.</Text>
           </Text>
-          <Text style={styles.sub}>
-            Premium gear, sanitised and sized on delivery. Priced per day.
-          </Text>
+          <Text style={styles.sub}>Premium gear, sanitised and sized on delivery. Priced per day.</Text>
         </View>
 
-        {GEAR.map((g) => {
-          const on = selected.has(g.id);
-          return (
-            <Press
-              key={g.id}
-              accessibilityLabel={`Add ${g.n}`}
-              onPress={() => toggle(g.id)}
-              style={[styles.row, on && styles.rowOn]}
-            >
-              <View style={styles.rowBody}>
+        {/* 2-column gear grid */}
+        <View style={styles.grid}>
+          {GEAR.map((g) => {
+            const on = selected.has(g.id);
+            return (
+              <Press
+                key={g.id}
+                accessibilityLabel={`Add ${g.n}`}
+                onPress={() => toggle(g.id)}
+                style={[styles.card, on ? styles.cardOn : styles.cardOff]}
+              >
+                <View style={[styles.badge, on ? styles.badgeOn : styles.badgeOff]}>{on && <Check />}</View>
+                <View style={styles.iconWrap}>
+                  <GearIcon id={g.id} />
+                </View>
                 <Text style={styles.gearName}>{g.n}</Text>
                 <Text style={styles.gearDesc}>{g.d}</Text>
                 <Text style={styles.gearPrice}>
-                  +₹{g.p.toLocaleString('en-IN')}
+                  +{rupee(g.p)}
                   <Text style={styles.perDay}>/day</Text>
                 </Text>
-              </View>
-              <View style={[styles.checkbox, on && styles.checkboxOn]}>
-                {on && <Text style={styles.check}>✓</Text>}
-              </View>
-            </Press>
-          );
-        })}
-        <View style={{ height: vs(28) }} />
+              </Press>
+            );
+          })}
+        </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      {/* fixed bottom bar — item count + add-on total + CTA */}
+      <View style={styles.footer} pointerEvents="box-none">
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>
             {count} ITEM{count === 1 ? '' : 'S'} ADDED
           </Text>
-          <Text style={styles.totalValue}>+₹{extra.toLocaleString('en-IN')}</Text>
+          <Text style={styles.totalValue}>+{rupee(extra)}</Text>
         </View>
-        <Press accessibilityLabel="Continue" onPress={handleContinue} style={styles.cta}>
-          <Text style={styles.ctaText}>Continue →</Text>
+        <Press accessibilityLabel="Verify and pay" onPress={handleContinue} style={styles.cta}>
+          <Text style={styles.ctaTxt}>VERIFY & PAY →</Text>
         </Press>
       </View>
     </Screen>
@@ -100,78 +162,57 @@ export function GearScreen({
 }
 
 const styles = StyleSheet.create({
-  topbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: rs(16),
-    paddingVertical: vs(10),
-  },
-  back: { width: rs(44), height: rs(44), justifyContent: 'center', alignItems: 'center' },
-  backArrow: { color: C.ink, fontSize: ms(22) },
-  topbarTitle: {
-    color: C.dim,
-    fontFamily: F.mono,
-    fontSize: type.caption,
-    letterSpacing: rs(2),
-  },
+  scroll: { paddingBottom: vs(160) },
 
-  scroll: { paddingHorizontal: rs(24), paddingTop: vs(8) },
-  head: { marginBottom: vs(14) },
-  title: { color: C.ink, fontFamily: F.serif, fontSize: ms(28), lineHeight: ms(30) },
-  titleEm: { color: C.ember, fontStyle: 'italic' },
-  sub: { color: C.dim, fontFamily: F.grotesk, fontSize: type.label, lineHeight: ms(20), marginTop: vs(6) },
+  head: { paddingHorizontal: rs(24), paddingTop: vs(18), paddingBottom: vs(8) },
+  title: { fontFamily: F.serif, fontSize: rs(28), lineHeight: rs(29), color: C.ink, marginBottom: vs(6) },
+  titleEm: { fontStyle: 'italic', color: C.ember },
+  sub: { fontFamily: F.grotesk, fontSize: rs(13), lineHeight: rs(20), color: C.dim },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: rs(24), paddingVertical: vs(14), gap: rs(11) },
+  card: {
+    width: '47%',
+    flexGrow: 1,
+    position: 'relative',
     padding: rs(16),
-    marginBottom: vs(11),
-    backgroundColor: C.surf,
     borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: radius.md,
   },
-  rowOn: { backgroundColor: 'rgba(226,84,42,0.08)', borderColor: C.ember },
-  rowBody: { flex: 1 },
-  gearName: { color: C.ink, fontFamily: F.grotesk, fontWeight: '600', fontSize: ms(15) },
-  gearDesc: { color: C.faint, fontFamily: F.mono, fontSize: ms(10), marginTop: vs(3) },
-  gearPrice: { color: C.sun, fontFamily: F.grotesk, fontWeight: '600', fontSize: ms(14), marginTop: vs(10) },
-  perDay: { color: C.faint, fontWeight: '400', fontSize: ms(10) },
+  cardOff: { backgroundColor: C.surf, borderColor: C.line },
+  cardOn: { backgroundColor: 'rgba(226,84,42,0.08)', borderColor: C.ember },
 
-  checkbox: {
+  badge: {
+    position: 'absolute',
+    top: rs(12),
+    right: rs(12),
     width: rs(22),
     height: rs(22),
     borderWidth: 1.5,
-    borderColor: C.faint,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: rs(14),
   },
-  checkboxOn: { borderColor: C.ember, backgroundColor: C.ember },
-  check: { color: '#fff', fontSize: ms(14), fontWeight: '700' },
+  badgeOff: { borderColor: C.faint, backgroundColor: 'transparent' },
+  badgeOn: { borderColor: C.ember, backgroundColor: C.ember },
+
+  iconWrap: { height: rs(30), justifyContent: 'flex-end', alignItems: 'flex-start' },
+  gearName: { fontFamily: F.grotesk, fontWeight: '600', fontSize: rs(15), color: C.ink, marginTop: vs(14) },
+  gearDesc: { fontFamily: F.mono, fontSize: rs(10), color: C.faint, marginTop: vs(3) },
+  gearPrice: { fontFamily: F.grotesk, fontWeight: '600', fontSize: rs(14), color: C.sun, marginTop: vs(10) },
+  perDay: { fontFamily: F.mono, fontSize: rs(10), color: C.faint, fontWeight: '400' },
 
   footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: rs(24),
     paddingTop: vs(16),
     paddingBottom: vs(30),
     backgroundColor: C.base,
-    borderTopWidth: 1,
-    borderTopColor: C.line2,
   },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: vs(12),
-  },
-  totalLabel: { color: C.dim, fontFamily: F.mono, fontSize: type.caption, letterSpacing: rs(1.5) },
-  totalValue: { color: C.sun, fontFamily: F.grotesk, fontWeight: '600', fontSize: ms(15) },
-  cta: {
-    backgroundColor: C.ember,
-    paddingVertical: vs(17),
-    alignItems: 'center',
-    borderRadius: radius.md,
-  },
-  ctaText: { color: '#fff', fontFamily: F.mono, fontSize: ms(12), letterSpacing: rs(2) },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(12) },
+  totalLabel: { fontFamily: F.mono, fontSize: rs(11), letterSpacing: rs(0.9), color: C.dim },
+  totalValue: { fontFamily: F.grotesk, fontWeight: '600', fontSize: rs(15), color: C.sun },
+
+  cta: { paddingVertical: vs(17), alignItems: 'center', backgroundColor: C.ember },
+  ctaTxt: { color: '#fff', fontFamily: F.mono, fontSize: rs(12), letterSpacing: rs(1.9) },
 });

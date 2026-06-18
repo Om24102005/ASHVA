@@ -36,4 +36,10 @@ export const type = {
   caption: ms(11),
 };
 
-export const radius = { sm: 10, md: 16, lg: 22, pill: 999 };
+/** The original ASHVA design is SHARP — square corners, thin borders, editorial.
+ *  Everything is rectangular except true circles (dots, avatars → use `pill`). */
+export const radius = { sm: 0, md: 0, lg: 0, pill: 999 };
+
+/** Letter-spacing in points for the wide mono labels/eyebrows/buttons.
+ *  (Original CSS used .1em–.36em; these are the point equivalents at our sizes.) */
+export const tracking = { tight: 0.5, label: 1.5, eyebrow: 2.4, wide: 3.4 };

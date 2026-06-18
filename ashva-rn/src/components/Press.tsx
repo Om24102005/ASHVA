@@ -9,12 +9,14 @@ export function Press({
   onPress,
   style,
   haptic = true,
+  disabled = false,
   accessibilityLabel,
 }: {
   children: React.ReactNode;
   onPress?: (e: GestureResponderEvent) => void;
   style?: StyleProp<ViewStyle>;
   haptic?: boolean;
+  disabled?: boolean;
   accessibilityLabel?: string;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -23,6 +25,7 @@ export function Press({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      disabled={disabled}
       hitSlop={8}
       onPressIn={() => to(0.96)}
       onPressOut={() => to(1)}
