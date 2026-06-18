@@ -20,7 +20,7 @@ if (!API_URL) {
 }
 
 export const CONFIG = {
-  API: API_URL || 'https://api.ashva.app',
+  API: API_URL || 'https://ashva-api.onrender.com',
   GOOGLE_WEB_CLIENT_ID:
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     '994367484524-mbck2l7i6656411ki3l0nrtfjq817dev.apps.googleusercontent.com',

@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY tsconfig.json ./
+COPY init.sql ./
 COPY src ./src
 ENV NODE_ENV=production
 EXPOSE 4000

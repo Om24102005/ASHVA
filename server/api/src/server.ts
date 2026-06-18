@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './env.js';
 import { waitForDb } from './db.js';
+import { ensureSchema } from './migrate.js';
 import { errorMiddleware, asyncHandler, unauthorized } from './http.js';
 import { requireAuth } from './auth/middleware.js';
 import { getUserProfile } from './repo.js';
@@ -15,6 +16,7 @@ import { ensureBucket } from './providers/storage.js';
 
 async function main(): Promise<void> {
   await waitForDb();
+  await ensureSchema();
   await ensureBucket();
 
   const app = express();
