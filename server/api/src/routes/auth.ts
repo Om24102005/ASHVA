@@ -12,6 +12,15 @@ import { Session } from '../types.js';
 
 export const authRouter = Router();
 
+/** Compare the destination an OTP was SENT to against the one being logged into.
+ *  Without this, an attacker can request a code to their own contact and redeem
+ *  it against a victim's — full account takeover. Phone compares digits only;
+ *  email compares case-insensitively. */
+function sameDestination(channel: 'email' | 'phone', a: string, b: string): boolean {
+  if (channel === 'phone') return a.replace(/\D/g, '') === b.replace(/\D/g, '');
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 async function sessionFor(userId: string, method: Session['method']): Promise<Session> {
   const user = await getUserProfile(userId);
   if (!user) throw unauthorized('Account not found.');
@@ -74,8 +83,11 @@ authRouter.post(
     const { countryCode, phone, challengeId, code } = z
       .object({ countryCode: z.string().min(1), phone: z.string().min(6), challengeId: z.string().min(1), code: z.string().min(4) })
       .parse(req.body);
-    await verifyChallenge(challengeId, code);
+    const ch = await verifyChallenge(challengeId, code);
     const full = `${countryCode} ${phone}`;
+    if (ch.channel !== 'phone' || !sameDestination('phone', ch.destination, full)) {
+      throw unauthorized('This code was issued for a different number.');
+    }
     const found = await query('SELECT user_id FROM contact_info WHERE phone = $1', [full]);
     let userId = found.rows[0]?.user_id as string | undefined;
     if (!userId) {
@@ -106,7 +118,10 @@ authRouter.post(
         countryCode: z.string().optional().default('+91'),
       })
       .parse(req.body);
-    await verifyChallenge(challengeId, code);
+    const ch = await verifyChallenge(challengeId, code);
+    if (ch.channel !== channel || !sameDestination(channel, ch.destination, destination)) {
+      throw unauthorized('This code was issued for a different contact.');
+    }
 
     const col = channel === 'email' ? 'email' : 'phone';
     const value = channel === 'email' ? destination.toLowerCase() : destination;
