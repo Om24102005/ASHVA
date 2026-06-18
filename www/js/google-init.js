@@ -8,8 +8,11 @@
     try {
       var G = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth;
       if (!G || !G.initialize) return;
-      var cid = (window.ASHVA && window.ASHVA.GOOGLE_WEB_CLIENT_ID) || undefined;
-      G.initialize({ clientId: cid, scopes: ['profile', 'email'], grantOfflineAccess: false });
+      // On iOS the plugin must use the iOS OAuth client (GIDClientID in Info.plist),
+      // NOT the web client — Google rejects custom-scheme redirects for WEB clients.
+      // So do NOT pass clientId here; let the native layer read GIDClientID. The web
+      // client is still used server-side as serverClientId (capacitor.config) for token audience.
+      G.initialize({ scopes: ['profile', 'email'], grantOfflineAccess: false });
     } catch (e) {
       /* ignore */
     }
