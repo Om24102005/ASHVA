@@ -18,12 +18,12 @@ export const C = {
   line2: 'rgba(244,235,221,0.06)',
 };
 
-/** System fonts for now; custom faces (Instrument Serif / Space Grotesk /
- *  JetBrains Mono) get loaded via expo-font in a later pass. */
+/** Brand faces, loaded via @expo-google-fonts in App.tsx (useFonts). Family
+ *  names must match the loaded keys. Falls back to system until loaded. */
 export const F = {
-  serif: 'serif',
-  grotesk: 'System',
-  mono: 'monospace',
+  serif: 'InstrumentSerif_400Regular',
+  grotesk: 'SpaceGrotesk_500Medium',
+  mono: 'JetBrainsMono_400Regular',
 };
 
 /** Fluid type scale — moderate-scaled so it adapts to device without ballooning. */

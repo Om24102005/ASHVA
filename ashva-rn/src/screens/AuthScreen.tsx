@@ -1,14 +1,21 @@
 /** Auth — channel-agnostic OTP sign-in (phone or email). Uses a real numeric
  *  TextInput with one-time-code autofill so the OS can paste/autofill the SMS
  *  code (the original web keypad blocked that). */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import { Screen } from '../components/Screen';
 import { Press } from '../components/Press';
 import { C, type, F, radius } from '../theme';
 import { rs, vs } from '../responsive';
 import { API } from '../api';
+import { CONFIG } from '../config';
+
+WebBrowser.maybeCompleteAuthSession();
+const IOS_CLIENT_ID = '994367484524-8f2ffl0gegqlcqe2mi9tkho2rbgqi7ul.apps.googleusercontent.com';
 
 type Channel = 'phone' | 'email';
 
@@ -20,6 +27,22 @@ export function AuthScreen({ onAuthed }: { onAuthed: (session: any) => void }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  // Google sign-in (native auth-session). idToken → server verifies → session.
+  const [gReq, gRes, gPrompt] = Google.useAuthRequest({ iosClientId: IOS_CLIENT_ID, webClientId: CONFIG.GOOGLE_WEB_CLIENT_ID });
+  useEffect(() => {
+    if (gRes?.type !== 'success') return;
+    const idToken = gRes.params?.id_token || (gRes.authentication as any)?.idToken;
+    if (!idToken) { setErr('Google sign-in failed.'); return; }
+    (async () => {
+      setBusy(true);
+      const r = await API.googleSignin(idToken);
+      setBusy(false);
+      if (!r.ok) { setErr(r.error.message); return; }
+      await API.setSession(r.data);
+      onAuthed(r.data);
+    })();
+  }, [gRes]);
 
   const destValid = channel === 'phone' ? dest.replace(/\D/g, '').length >= 6 : /\S+@\S+\.\S+/.test(dest);
 
@@ -80,6 +103,11 @@ export function AuthScreen({ onAuthed }: { onAuthed: (session: any) => void }) {
             </View>
             {!!err && <Text style={styles.err}>{err}</Text>}
             <PrimaryButton label="Send code" disabled={!destValid || busy} busy={busy} onPress={sendCode} />
+            <View style={styles.orRow}><View style={styles.orLine} /><Text style={styles.orTxt}>OR</Text><View style={styles.orLine} /></View>
+            <Press accessibilityLabel="Continue with Google" onPress={() => { if (gReq) gPrompt(); }} style={styles.gbtn}>
+              <Ionicons name="logo-google" size={rs(18)} color={C.ink} />
+              <Text style={styles.gtxt}>Continue with Google</Text>
+            </Press>
           </View>
         ) : (
           <View>
@@ -141,4 +169,9 @@ const styles = StyleSheet.create({
   btn: { backgroundColor: C.ember, borderRadius: radius.pill, paddingVertical: vs(16), alignItems: 'center' },
   btnOff: { backgroundColor: 'rgba(226,84,42,0.25)' },
   btnTxt: { color: C.base, fontSize: type.h3, fontWeight: '700' },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: rs(10), marginVertical: vs(18) },
+  orLine: { flex: 1, height: 1, backgroundColor: C.line },
+  orTxt: { color: C.faint, fontSize: type.caption, letterSpacing: rs(1) },
+  gbtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: rs(10), borderWidth: 1, borderColor: C.line, borderRadius: radius.pill, paddingVertical: vs(14) },
+  gtxt: { color: C.ink, fontSize: type.body, fontWeight: '600' },
 });

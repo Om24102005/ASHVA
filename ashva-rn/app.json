@@ -26,7 +26,12 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["expo-camera"],
+    "plugins": [
+      "expo-camera",
+      "expo-image-picker",
+      "expo-web-browser",
+      "expo-font"
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }

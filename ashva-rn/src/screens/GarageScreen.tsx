@@ -8,7 +8,17 @@ import { Press } from '../components/Press';
 import { C, type, F, radius } from '../theme';
 import { rs, vs, ms } from '../responsive';
 
-export function GarageScreen({ session, onSignOut }: { session: any; onSignOut: () => void }) {
+export function GarageScreen({
+  session,
+  onSignOut,
+  onOpenKyc,
+  onOpenMembership,
+}: {
+  session: any;
+  onSignOut: () => void;
+  onOpenKyc?: () => void;
+  onOpenMembership?: () => void;
+}) {
   const user = session?.user ?? {};
   const displayName: string = (user.displayName || '').trim();
   const email: string = user.contact?.email || '';
@@ -64,9 +74,9 @@ export function GarageScreen({ session, onSignOut }: { session: any; onSignOut: 
         {/* KYC status */}
         <Text style={styles.sectionLabel}>VERIFICATION</Text>
         <View style={styles.card}>
-          <View style={styles.kycRow}>
+          <Press accessibilityLabel="Open KYC verification" onPress={() => onOpenKyc?.()} style={styles.kycRow}>
             <View style={styles.kycBody}>
-              <Text style={styles.rowLabel}>KYC status</Text>
+              <Text style={styles.rowLabel}>KYC status{onOpenKyc ? '  ›' : ''}</Text>
               <Text style={styles.rowSub}>Documents · licence · Aadhaar</Text>
             </View>
             <View style={[styles.badge, kycVerified ? styles.badgeOk : styles.badgePending]}>
@@ -74,8 +84,18 @@ export function GarageScreen({ session, onSignOut }: { session: any; onSignOut: 
                 {kycStatus}
               </Text>
             </View>
-          </View>
+          </Press>
         </View>
+
+        {onOpenMembership && (
+          <Press accessibilityLabel="ASHVA Club membership" onPress={onOpenMembership} style={styles.club}>
+            <View style={styles.toggleBody}>
+              <Text style={styles.rowLabel}>ASHVA Club  ›</Text>
+              <Text style={styles.rowSub}>Member pricing, priority bikes, concierge</Text>
+            </View>
+            <Text style={styles.clubCta}>JOIN</Text>
+          </Press>
+        )}
 
         {/* Preferences */}
         <Text style={styles.sectionLabel}>PREFERENCES</Text>
@@ -254,6 +274,21 @@ const styles = StyleSheet.create({
     gap: rs(12),
   },
   toggleBody: { flex: 1 },
+
+  club: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: C.amber,
+    backgroundColor: 'rgba(243,169,59,0.08)',
+    borderRadius: radius.md,
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(14),
+    marginBottom: vs(24),
+    gap: rs(12),
+  },
+  clubCta: { color: C.amber, fontFamily: F.mono, fontSize: type.label, letterSpacing: rs(1) },
 
   signOut: {
     alignItems: 'center',
