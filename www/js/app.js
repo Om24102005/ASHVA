@@ -59,12 +59,13 @@ class Ashva{
   clearTimers(){this.timers.forEach(t=>clearInterval(t));this.timers=[];}
   go(screen,data){this.s.stack.push(this.s.screen);if(data)Object.assign(this.s,data);this.s.screen=screen;this.render();}
   tab(screen){this.s.stack=[];this.s.screen=screen;this.render();}
-  back(){const p=this.s.stack.pop();if(p){this.s.screen=p;this.render();}}
+  back(){const p=this.s.stack.pop();if(p){this._back=true;this.s.screen=p;this.render();}}
 
   render(){
     this.clearTimers();
     const isTab=TABS.includes(this.s.screen);
-    this.app.innerHTML=`<div class="scr" style="animation:a-screen .34s cubic-bezier(.16,1,.3,1)">${this.view()}</div>`;
+    const anim=this._back?'a-screen-back':'a-screen';this._back=false;
+    this.app.innerHTML=`<div class="scr" style="animation:${anim} .3s cubic-bezier(.16,1,.3,1)">${this.view()}</div>`;
     const nativeShell=document.documentElement.classList.contains('native');
     const bot=isTab?96:34;
     this.app.style.paddingBottom=nativeShell?`calc(${bot}px + env(safe-area-inset-bottom))`:bot+'px';
@@ -162,10 +163,11 @@ class Ashva{
   setBtn(sel,html){const b=$(sel);if(b){b.innerHTML=html;b.style.pointerEvents='none';b.style.opacity='.85';}}
   refreshMe(){API.me().then(r=>{if(r.ok&&r.data.user){this.s.user=r.data.user;const sess=API.getSession();if(sess){sess.user=r.data.user;API.setSession(sess);}}});}
   loadAssets(){API.assets().then(r=>{if(r.ok){const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;});this.s.assetMap=m;}});}
-  afterLogin(){
+  afterLogin(skipGate){
     this.loadAssets();
     const step=gateStep(this.s.user);
     this.s.stack=[];
+    if(skipGate){try{localStorage.setItem('ashva.gkskip','1');}catch{}}
     if(step&&!this.gkSkipped()){this.s.gk={step,val:'',otp:'',challengeId:null,busy:false};this.s.screen='gatekeeper';}
     else this.s.screen='home';
     this.render();
@@ -211,19 +213,32 @@ class Ashva{
       else{this.flash(r.error.message,C.red);a.otp='';this.render();}
     });
   }
-  googleSignin(){
+  googleSignin(retry){
     const Cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.GoogleAuth;
     if(Cap){
+      if(!retry)this.setBtn('[data-act="google"]',SPINNER);
       Cap.signIn().then(res=>{
         const idToken=(res&&res.authentication&&res.authentication.idToken)||res.idToken;
         if(!idToken)throw new Error('no_token');
         return API.googleSignin(idToken);
       }).then(r=>{
-        if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin();}
+        this.render();
+        if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin(true);}
         else if(r)this.flash(r.error.message,C.red);
       }).catch(err=>{
-        if(err&&err.message==='no_token')this.flash('Google sign-in failed — no token returned',C.red);
-        else this.flash('Google sign-in cancelled',C.amber);
+        console.error('[google] err:',err&&err.message,'code:',err&&err.code);
+        const msg=(err&&(err.message||err.errorMessage))||'';
+        // Stale hasPreviousSignIn() state causes restorePreviousSignIn() to fail with error -5.
+        // Sign out clears it so the next call shows the fresh account picker.
+        if(!retry&&/cancel|flow/i.test(msg)){
+          Cap.signOut().catch(()=>{}).then(()=>this.googleSignin(true));
+          return;
+        }
+        this.render();
+        if(msg==='no_token')this.flash('Google sign-in failed — no token returned',C.red);
+        else if(/cancel/i.test(msg)){/* user explicitly dismissed */}
+        else if(/network|play services|keychain/i.test(msg))this.flash('Google sign-in unavailable — check network',C.amber);
+        else this.flash('Google sign-in failed — try again',C.red);
       });
       return;
     }
@@ -238,7 +253,7 @@ class Ashva{
       callback:(response)=>{
         if(!response||!response.credential){this.flash('Google sign-in failed',C.red);return;}
         API.googleSignin(response.credential).then(r=>{
-          if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin();}
+          if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin(true);}
           else if(r)this.flash(r.error.message||'Google sign-in failed',C.red);
         });
       },
@@ -343,7 +358,8 @@ class Ashva{
     const el=document.createElement('div');el.id='flash';
     el.style.cssText=`position:absolute;top:64px;left:24px;right:24px;z-index:80;padding:14px 18px;background:${C.surf};border:1px solid ${col};color:${col};font-family:${F.m};font-size:11px;letter-spacing:.08em;text-align:center;animation:rise .3s ease`;
     el.textContent=msg;$('#device').appendChild(el);
-    const t=setTimeout(()=>{if(el)el.remove();},2200);this.timers.push(t);
+    const out=setTimeout(()=>{el.style.animation='toast-out .26s ease forwards';setTimeout(()=>{if(el.parentNode)el.remove();},240);},1900);
+    this.timers.push(out);
   }
 }
 

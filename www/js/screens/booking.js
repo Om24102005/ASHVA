@@ -1,36 +1,139 @@
 "use strict";
-/* SCREEN · Booking Step 1 — pickup hub, June-2026 date strip, duration stepper */
+/* SCREEN · Booking Step 1 — premium hub selector, date strip, telemetry summary */
 
 function viewBooking(app){
   const bk=app.s.bk;const b=bike(bk.bikeId);
   const dates=[];for(let d=1;d<=30;d++)dates.push(d);
-  return `<div style="padding-bottom:120px">
-    ${topbar('CONFIGURE · STEP 1')}${progress(0)}
+  const endD=bk.date+bk.days;
+  const bikeTotal=b.price*bk.days;
+  const gearDaily=gearPerDay(app);
+  const gearTotal=gearDaily*bk.days;
+  const subtotal=bikeTotal+gearTotal;
+  const platform=subtotal>0?Math.round(subtotal*.06):0;
+  const gst=Math.round(subtotal*.18);
+  const grand=subtotal+platform+gst;
+  const selHub=HUBS.find(h=>h.id===bk.hub)||HUBS[0];
+
+  return `<div style="padding-bottom:140px;background:${C.base}">
+    ${topbar('CONFIGURE · STEP 1')}
+    ${progress(0)}
+
+    <div style="padding:0 24px 6px">
+      ${eyebrow('// YOUR MACHINE',C.sun)}
+    </div>
     ${bikeStrip(b)}
-    <div style="padding:8px 24px">
-      ${eyebrow('// PICKUP HUB',C.sun)}
-      <div style="margin:14px 0 28px;display:flex;flex-direction:column;gap:9px">
-        ${HUBS.map(h=>{const a=bk.hub===h.id;return `<div class="press" data-act="hub" data-h="${h.id}" style="display:flex;align-items:center;gap:14px;padding:15px;background:${a?'rgba(226,84,42,.08)':C.surf};border:1px solid ${a?C.ember:C.line}">
-          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${a?C.ember:C.faint};display:flex;align-items:center;justify-content:center">${a?`<div style="width:9px;height:9px;border-radius:50%;background:${C.ember}"></div>`:''}</div>
-          <div style="flex:1"><div style="font-family:${F.g};font-weight:600;font-size:15px">${h.id}</div><div style="font-family:${F.m};font-size:10px;color:${C.faint};margin-top:2px">${h.sub}</div></div>
-          <div style="font-family:${F.m};font-size:11px;color:${C.dim}">${h.km}</div></div>`;}).join('')}
+
+    <div style="padding:6px 24px 12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="width:18px;height:1px;background:${C.ember}"></span>
+        ${eyebrow('PICKUP HUB',C.amber)}
       </div>
-      ${eyebrow('// START DATE · JUNE 2026',C.sun)}
+      <div style="font-family:${F.s};font-size:24px;line-height:1;margin-top:4px">Where the road begins</div>
     </div>
-    <div class="noscroll" style="display:flex;gap:9px;overflow-x:auto;padding:14px 24px 4px">
-      ${dates.map(d=>{const a=bk.date===d;const dow=['S','M','T','W','T','F','S'][d%7];return `<div class="press" data-act="date" data-d="${d}" style="min-width:50px;text-align:center;padding:13px 0;background:${a?C.ember:C.surf};border:1px solid ${a?C.ember:C.line};color:${a?'#fff':C.ink}">
-        <div style="font-family:${F.m};font-size:9px;color:${a?'rgba(255,255,255,.7)':C.faint}">${dow}</div>
-        <div style="font-family:${F.g};font-weight:600;font-size:18px;margin-top:3px">${d}</div></div>`;}).join('')}
+
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:10px">
+      ${HUBS.map(h=>{const a=bk.hub===h.id;return `<div class="press" data-act="hub" data-h="${h.id}" style="position:relative;display:flex;align-items:center;gap:14px;padding:16px 16px;background:${a?`linear-gradient(135deg,rgba(226,84,42,.12),rgba(243,169,59,.04))`:C.surf};border:1px solid ${a?C.ember:C.line};overflow:hidden">
+        ${a?`<div style="position:absolute;top:0;left:0;bottom:0;width:3px;background:${C.ember}"></div>`:''}
+        <div style="width:42px;height:42px;flex-shrink:0;border:1px solid ${a?C.ember:C.line};display:flex;align-items:center;justify-content:center;background:${a?'rgba(226,84,42,.1)':C.well}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${a?C.ember:C.faint}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.2-7-12a7 7 0 0114 0c0 4.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:${F.g};font-weight:600;font-size:16px;color:${C.ink}">${h.id}</span>
+            ${a?`<span style="font-family:${F.m};font-size:8.5px;letter-spacing:.22em;color:${C.ember};padding:3px 6px;background:rgba(226,84,42,.1);border:1px solid ${C.ember}">SELECTED</span>`:''}
+          </div>
+          <div style="font-family:${F.g};font-size:12px;color:${C.faint};margin-top:3px;font-style:italic">${h.sub}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint}">${h.km}</div>
+          <div style="display:flex;justify-content:flex-end;margin-top:6px">
+            <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${a?C.ember:C.faint};display:flex;align-items:center;justify-content:center">${a?`<div style="width:8px;height:8px;border-radius:50%;background:${C.ember}"></div>`:''}</div>
+          </div>
+        </div>
+      </div>`;}).join('')}
     </div>
+
+    <div style="padding:28px 24px 6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="width:18px;height:1px;background:${C.ember}"></span>
+            ${eyebrow('START DATE',C.amber)}
+          </div>
+          <div style="font-family:${F.s};font-size:24px;line-height:1">June 2026</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint}">WINDOW</div>
+          <div style="font-family:${F.g};font-weight:600;font-size:14px;color:${C.sun};margin-top:3px">${dlabel(bk.date)} – ${dlabel(endD>30?endD-30:endD)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="noscroll" style="display:flex;gap:8px;overflow-x:auto;padding:8px 24px 4px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch">
+      ${dates.map(d=>{const a=bk.date===d;const dow=['S','M','T','W','T','F','S'][(d-1)%7];const inWindow=d>=bk.date&&d<endD;return `<div class="press" data-act="date" data-d="${d}" style="position:relative;min-width:54px;scroll-snap-align:start;text-align:center;padding:14px 0;background:${a?C.ember:inWindow?'rgba(226,84,42,.06)':C.surf};border:1px solid ${a?C.ember:inWindow?'rgba(226,84,42,.25)':C.line};color:${a?'#fff':C.ink}">
+        <div style="font-family:${F.m};font-size:9px;letter-spacing:.14em;color:${a?'rgba(255,255,255,.7)':C.faint}">${dow}</div>
+        <div style="font-family:${F.g};font-weight:700;font-size:20px;margin-top:4px">${d}</div>
+        ${inWindow&&!a?`<div style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:${C.ember}"></div>`:''}
+      </div>`;}).join('')}
+    </div>
+
     <div style="padding:24px">
-      ${eyebrow('// DURATION',C.sun)}
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px;padding:6px;background:${C.surf};border:1px solid ${C.line}">
-        <div class="press" data-act="dur" data-v="-1" style="width:54px;height:54px;display:flex;align-items:center;justify-content:center;font-size:28px;color:${C.ink};background:${C.well}">−</div>
-        <div style="text-align:center"><div style="font-family:${F.g};font-weight:700;font-size:30px">${bk.days}<span style="font-size:14px;color:${C.faint};font-weight:400"> days</span></div></div>
-        <div class="press" data-act="dur" data-v="1" style="width:54px;height:54px;display:flex;align-items:center;justify-content:center;font-size:26px;color:${C.ink};background:${C.well}">+</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="width:18px;height:1px;background:${C.ember}"></span>
+        ${eyebrow('DURATION',C.amber)}
       </div>
-      <div style="text-align:center;font-family:${F.m};font-size:11px;letter-spacing:.08em;color:${C.dim};margin-top:14px">${dlabel(bk.date)} → ${dlabel(bk.date+bk.days)} · 2026</div>
+      <div style="font-family:${F.s};font-size:24px;line-height:1;margin-bottom:14px">${bk.days} day${bk.days===1?'':'s'} on the road</div>
+
+      <div style="display:flex;align-items:stretch;justify-content:space-between;margin-bottom:18px;padding:6px;background:${C.surf};border:1px solid ${C.line}">
+        <div class="press" data-act="dur" data-v="-1" style="width:60px;display:flex;align-items:center;justify-content:center;font-size:30px;color:${bk.days>1?C.ink:C.faint};background:${C.well};font-family:${F.g};font-weight:300;cursor:${bk.days>1?'pointer':'not-allowed'}">−</div>
+        <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-family:${F.g};font-weight:700;font-size:34px;line-height:1;color:${C.ink}">${bk.days}<span style="font-size:13px;color:${C.faint};font-weight:400;letter-spacing:.12em;margin-left:6px">DAYS</span></div>
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.dim};margin-top:6px">${dlabel(bk.date)} → ${dlabel(endD>30?endD-30:endD)}</div>
+        </div>
+        <div class="press" data-act="dur" data-v="1" style="width:60px;display:flex;align-items:center;justify-content:center;font-size:28px;color:${bk.days<30?C.ink:C.faint};background:${C.well};font-family:${F.g};font-weight:300">+</div>
+      </div>
     </div>
-    ${bottomBtn('ADD GEAR →','gearnext')}
+
+    <div style="margin:6px 24px 0;padding:18px 18px;background:${C.surf};border:1px solid ${C.line}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        ${eyebrow('// TELEMETRY · LIVE PRICING',C.amber)}
+        <span style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.green}">● LIVE</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;justify-content:space-between;font-family:${F.g};font-size:13px">
+          <span style="color:${C.dim}">${b.name} · ${bk.days}d</span>
+          <span style="color:${C.ink};font-weight:500">${rupee(bikeTotal)}</span>
+        </div>
+        ${gearDaily>0?`<div style="display:flex;justify-content:space-between;font-family:${F.g};font-size:13px">
+          <span style="color:${C.dim}">Gear add-ons · ${bk.days}d</span>
+          <span style="color:${C.ink};font-weight:500">${rupee(gearTotal)}</span>
+        </div>`:''}
+        <div style="display:flex;justify-content:space-between;font-family:${F.g};font-size:13px">
+          <span style="color:${C.dim}">Platform fee · 6%</span>
+          <span style="color:${C.dim}">${rupee(platform)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:${F.g};font-size:13px">
+          <span style="color:${C.dim}">GST · 18%</span>
+          <span style="color:${C.dim}">${rupee(gst)}</span>
+        </div>
+        <div style="height:1px;background:${C.line};margin:6px 0 2px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end">
+          <span style="font-family:${F.m};font-size:10px;letter-spacing:.18em;color:${C.faint}">ESTIMATED TOTAL</span>
+          <span style="font-family:${F.s};font-size:30px;color:${C.sun};line-height:1">${rupee(grand)}</span>
+        </div>
+        <div style="font-family:${F.g};font-size:11px;color:${C.faint};font-style:italic;margin-top:4px">Fuel, helmets & roadside assist included.</div>
+      </div>
+    </div>
+
+    <div style="padding:18px 24px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:${C.surf};border:1px solid ${C.line}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${C.green}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.2-7-12a7 7 0 0114 0c0 4.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span style="font-family:${F.g};font-size:12px;color:${C.ink}">${selHub.id} pickup</span>
+        </div>
+        <span style="font-family:${F.m};font-size:10px;letter-spacing:.16em;color:${C.faint}">FREE TRANSFER</span>
+      </div>
+    </div>
+
+    ${bottomBtn('ADD GEAR & CONTINUE →','gearnext')}
   </div>`;
 }

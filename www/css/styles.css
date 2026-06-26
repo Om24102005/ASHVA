@@ -15,7 +15,10 @@ body{background:#0a0705;display:flex;align-items:center;justify-content:center;m
 .scr{min-height:100%}
 .stg{opacity:0;animation:rise .55s cubic-bezier(.16,1,.3,1) forwards}
 @keyframes a-screen{from{opacity:0;transform:translateY(16px) scale(.992)}to{opacity:1;transform:none}}
+@keyframes a-screen-back{from{opacity:0;transform:translateX(24px) scale(.994)}to{opacity:1;transform:none}}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes toast-out{to{opacity:0;transform:translateY(-10px)}}
+@keyframes heroShine{0%{left:-100%}55%,100%{left:160%}}
 @keyframes kb{0%{transform:scale(1.03) translate(0,0)}100%{transform:scale(1.18) translate(-2.5%,-3.5%)}}
 @keyframes sweep{0%{transform:translateX(-130%) skewX(-16deg)}55%,100%{transform:translateX(260%) skewX(-16deg)}}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
@@ -30,7 +33,7 @@ body{background:#0a0705;display:flex;align-items:center;justify-content:center;m
 .sweep{position:absolute;top:0;bottom:0;left:0;width:42%;z-index:3;pointer-events:none;
   background:linear-gradient(100deg,transparent,rgba(255,225,190,.16) 45%,rgba(255,235,210,.28) 50%,transparent);
   animation:sweep 7s cubic-bezier(.5,0,.5,1) infinite}
-@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.01s!important}.heroimg{animation:none}.sweep{display:none}.grain{animation:none}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.01s!important}.heroimg{animation:none}.sweep{display:none}.grain{animation:none}#flash{animation:none!important}}
 
 /* ============================================================
    NATIVE SHELL (Capacitor on iOS / Android)
