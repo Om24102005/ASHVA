@@ -3,9 +3,8 @@
 
 function viewAuth(app){
   const a=app.s.auth;
-  const hero=`<div style="position:absolute;inset:0;${bgImg(ROUTES[0].photo,G.leh)}"></div>
-    <div class="heroimg" style="${bgImg(ROUTES[0].photo,G.leh)};opacity:.55"></div>
-    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,.45),rgba(23,17,13,.2) 30%,#17110D 86%)"></div>
+  const hero=`<div class="heroimg" style="${bgImg(ROUTES[0].photo,G.leh)}"></div>
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,.35) 0%,rgba(23,17,13,.1) 25%,rgba(23,17,13,.6) 65%,#17110D 88%)"></div>
     <div class="sweep"></div>`;
   let body;
   if(a.step==='enter'){

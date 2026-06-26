@@ -45,7 +45,7 @@ function viewHome(app){
     </div>
     <div class="noscroll" style="display:flex;gap:14px;overflow-x:auto;padding:0 24px 30px;scroll-snap-type:x mandatory">
       ${ROUTES.map(r=>`<div class="press" data-act="route" data-id="${r.id}" style="position:relative;min-width:230px;height:290px;scroll-snap-align:start;overflow:hidden;border:1px solid ${C.line};${bgImg(r.photo,r.grad)}">
-        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,.1),rgba(23,17,13,.85))"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,0) 0%,rgba(23,17,13,.2) 50%,rgba(23,17,13,.88) 100%)"></div>
         <div style="position:absolute;top:14px;left:14px;padding:5px 9px;background:rgba(23,17,13,.6);border:1px solid ${C.line};font-family:${F.m};font-size:9px;letter-spacing:.14em;color:${C.amber}">${r.terrain}</div>
         <div style="position:absolute;bottom:16px;left:16px;right:16px">
           ${eyebrow('// '+r.region,C.dim)}

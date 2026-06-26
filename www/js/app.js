@@ -212,15 +212,44 @@ class Ashva{
     });
   }
   googleSignin(){
-    const G=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.GoogleAuth;
-    if(!G){this.flash('Google sign-in needs setup — use email or phone',C.amber);return;}
-    G.signIn().then(res=>{
-      const idToken=(res&&res.authentication&&res.authentication.idToken)||res.idToken;
-      return API.googleSignin(idToken);
-    }).then(r=>{
-      if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin();}
-      else if(r)this.flash(r.error.message,C.red);
-    }).catch(()=>this.flash('Google sign-in cancelled',C.amber));
+    const Cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.GoogleAuth;
+    if(Cap){
+      Cap.signIn().then(res=>{
+        const idToken=(res&&res.authentication&&res.authentication.idToken)||res.idToken;
+        if(!idToken)throw new Error('no_token');
+        return API.googleSignin(idToken);
+      }).then(r=>{
+        if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin();}
+        else if(r)this.flash(r.error.message,C.red);
+      }).catch(err=>{
+        if(err&&err.message==='no_token')this.flash('Google sign-in failed — no token returned',C.red);
+        else this.flash('Google sign-in cancelled',C.amber);
+      });
+      return;
+    }
+    // Web fallback: Google Identity Services one-tap
+    const gis=window.google&&window.google.accounts&&window.google.accounts.id;
+    if(!gis){this.flash('Google sign-in unavailable — use email or phone',C.amber);return;}
+    const clientId=window.ASHVA&&window.ASHVA.GOOGLE_WEB_CLIENT_ID;
+    if(!clientId){this.flash('Google client ID not configured',C.red);return;}
+    gis.cancel();
+    gis.initialize({
+      client_id:clientId,
+      callback:(response)=>{
+        if(!response||!response.credential){this.flash('Google sign-in failed',C.red);return;}
+        API.googleSignin(response.credential).then(r=>{
+          if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin();}
+          else if(r)this.flash(r.error.message||'Google sign-in failed',C.red);
+        });
+      },
+      cancel_on_tap_outside:false,
+      use_fedcm_for_prompt:false
+    });
+    gis.prompt(n=>{
+      if(n.isNotDisplayed()||n.isSkippedMoment()){
+        this.flash('Pop-up blocked · allow pop-ups, or use email/phone',C.amber);
+      }
+    });
   }
 
   /* --- gatekeeper (verify the other contact channel) --- */

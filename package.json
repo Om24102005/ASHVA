@@ -10,7 +10,9 @@
     "open:android": "cap open android",
     "open:ios": "cap open ios",
     "copy": "cap copy",
-    "dev": "live-server www --port=5500 --host=0.0.0.0 --no-browser --wait=200"
+    "dev": "concurrently \"live-server www --port=5500 --host=0.0.0.0 --no-browser --wait=200\" \"npm run server\" --names \"web,api\" --prefix-colors \"cyan,yellow\"",
+    "dev:web": "live-server www --port=5500 --host=0.0.0.0 --no-browser --wait=200",
+    "server": "cd server/api && npm run dev"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
+    "concurrently": "^10.0.3",
     "live-server": "^1.2.2"
   }
 }

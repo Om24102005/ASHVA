@@ -25,11 +25,25 @@ const gen6 = (): string => String(crypto.randomInt(0, 1_000_000)).padStart(6, '0
 export async function createChallenge(channel: ContactStep, destination: string, userId?: string): Promise<OtpChallenge> {
   if (!destination) throw new ApiError(400, 'BAD_REQUEST', 'A destination is required.');
   const code = gen6();
+  if (env.nodeEnv !== 'production') {
+    console.log(`\n[otp:dev] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`[otp:dev] ${channel.toUpperCase()} → ${destination}`);
+    console.log(`[otp:dev] CODE: ${code}`);
+    console.log(`[otp:dev] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+  }
   const id = crypto.randomUUID();
   const codeHash = await bcrypt.hash(code, 8);
   store.set(id, { channel, destination, codeHash, expiresAt: Date.now() + env.otpTtlSec * 1000, userId, attempts: 0 });
-  if (channel === 'phone') await sendSmsCode(destination, code);
-  else await sendEmailCode(destination, code);
+  try {
+    if (channel === 'phone') await sendSmsCode(destination, code);
+    else await sendEmailCode(destination, code);
+  } catch (e) {
+    if (env.nodeEnv !== 'production') {
+      console.log(`[otp:dev] Delivery failed (${e instanceof Error ? e.message : e}) — use console code above`);
+    } else {
+      throw e;
+    }
+  }
   return { challengeId: id, destination, channel, expiresInSec: env.otpTtlSec };
 }
 
