@@ -147,7 +147,7 @@ class AdminApp {
     if (!email || !pw) { this.flash('Enter email and password.', C.red); return; }
     const r = await API.adminAuth(email, pw);
     if (!r.ok) { this.flash(r.error.message, C.red); return; }
-    const tok = r.data && (r.data.token || r.data.adminToken);
+    const tok = r.data && r.data.data && r.data.data.token;
     if (!tok) { this.flash('No token received.', C.red); return; }
     this.s.adminToken = tok;
     try { localStorage.setItem(ATKEY, tok); } catch { /* ignore */ }
@@ -175,28 +175,28 @@ class AdminApp {
   async loadFleet() {
     const r = await API.adminFleet(this.s.adminToken);
     if (!r.ok) { this.flash(r.error.message, C.red); return; }
-    this.s.admin.fleet = r.data;
+    this.s.admin.fleet = r.data.assets;
     this.render();
   }
 
   async loadBookings() {
     const r = await API.adminBookings(this.s.adminToken);
     if (!r.ok) { this.flash(r.error.message, C.red); return; }
-    this.s.admin.bookings = r.data;
+    this.s.admin.bookings = r.data.bookings;
     this.render();
   }
 
   async loadUsers() {
     const r = await API.adminUsers(this.s.adminToken);
     if (!r.ok) { this.flash(r.error.message, C.red); return; }
-    this.s.admin.users = r.data;
+    this.s.admin.users = r.data.users;
     this.render();
   }
 
   async loadKyc() {
     const r = await API.adminKyc(this.s.adminToken);
     if (!r.ok) { this.flash(r.error.message, C.red); return; }
-    this.s.admin.kyc = r.data;
+    this.s.admin.kyc = r.data.records;
     this.render();
   }
 
@@ -230,12 +230,9 @@ class AdminApp {
     }
 
     const payload = {
-      maker: f.maker,
-      name: f.name,
-      kicker: f.kicker || '',
-      specs: { engine: f.engine || '', power: f.power || '', range: f.range || '' },
-      price_per_day: Number(f.pricePerDay),
-      photo_url: photoUrl,
+      maker: f.maker, name: f.name, kicker: f.kicker || '',
+      engine: f.engine || '', power: f.power || '', range: f.range || '',
+      pricePerDay: Number(f.pricePerDay), photoUrl,
     };
 
     const r = await API.adminAddBike(this.s.adminToken, payload);
