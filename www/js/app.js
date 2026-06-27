@@ -35,7 +35,7 @@ class Ashva{
       user:null,assetMap:{},confirmed:null,
       prefs:{weather:true,convoy:false,ecall:true,offline:false},
       adminToken:null,
-      admin:{stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{}}
+      admin:{stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{},photoFile:null,photoPreview:null}
     };
     this.timers=[];
     this.app=$('#app');this.nav=$('#nav');
@@ -94,6 +94,10 @@ class Ashva{
     if(this.s.screen==='adminbookings'&&!this.s.admin.bookings)this.loadAdminBookings();
     if(this.s.screen==='adminusers'&&!this.s.admin.users)this.loadAdminUsers();
     if(this.s.screen==='adminkyc'&&!this.s.admin.kyc)this.loadAdminKyc();
+    if(this.s.screen==='adminaddbike'){
+      const fi=$('#photoFileIn');
+      if(fi)fi.addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;this.s.admin.photoFile=f;const r=new FileReader();r.onload=ev=>{this.s.admin.photoPreview=ev.target.result;this.render();};r.readAsDataURL(f);});
+    }
   }
 
   navView(){
@@ -177,7 +181,7 @@ class Ashva{
       case 'adminbookings':this.go('adminbookings');break;
       case 'adminusers':this.go('adminusers');break;
       case 'adminkyc':this.go('adminkyc');break;
-      case 'adminaddbike':this.s.admin.addBike={};this.go('adminaddbike');break;
+      case 'adminaddbike':this.s.admin.addBike={};this.s.admin.photoFile=null;this.s.admin.photoPreview=null;this.go('adminaddbike');break;
       case 'flttoggle':this.adminToggleAsset(d.id,d.to);break;
       case 'fltedit':this.flash('Edit price: coming soon',C.faint);break;
       case 'submitaddbike':this.adminAddBike();break;
@@ -190,7 +194,7 @@ class Ashva{
   /* --- session helpers --- */
   setBtn(sel,html){const b=$(sel);if(b){b.innerHTML=html;b.style.pointerEvents='none';b.style.opacity='.85';}}
   refreshMe(){API.me().then(r=>{if(r.ok&&r.data.user){this.s.user=r.data.user;const sess=API.getSession();if(sess){sess.user=r.data.user;API.setSession(sess);}}});}
-  loadAssets(){API.assets().then(r=>{if(r.ok){const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;});this.s.assetMap=m;}});}
+  loadAssets(){API.assets().then(r=>{if(!r.ok)return;const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;const b=BIKES.find(b=>b.id===a.slug);if(b){b.price=a.pricePerDay||b.price;b.status=a.status;if(a.photoUrl)b.photo=a.photoUrl;}else if(a.status!=='retired'){BIKES.push({id:a.slug||a.id,name:a.name,maker:a.maker||'',price:a.pricePerDay,status:a.status,photo:a.photoUrl||'',grad:'linear-gradient(160deg,#2a1e14,#17110D)',kicker:a.specs?.kicker||'',engine:a.specs?.engine||'',power:a.specs?.power||'',range:a.specs?.range||'',tag:a.specs?.tagline||'',routeScore:{leh:5,spiti:5,konkan:5,rann:5},rating:4.5,rides:0});}});this.s.assetMap=m;this.render();});}
   afterLogin(skipGate){
     this.loadAssets();
     const step=gateStep(this.s.user);
@@ -408,19 +412,27 @@ class Ashva{
       }else this.flash((r.error&&r.error.message)||'Update failed',C.red);
     });
   }
-  adminAddBike(){
+  async adminAddBike(){
     const f=this.s.admin.addBike||{};
     if(!f.name||!f.name.trim()){this.flash('Enter bike name',C.red);return;}
     if(!f.maker||!f.maker.trim()){this.flash('Enter manufacturer',C.red);return;}
     if(!f.pricePerDay||isNaN(Number(f.pricePerDay))){this.flash('Enter valid price per day',C.red);return;}
     this.setBtn('[data-act="submitaddbike"]',SPINNER);
+    let photoUrl=f.photoUrl||'';
+    if(this.s.admin.photoFile){
+      const fd=new FormData();fd.append('photo',this.s.admin.photoFile);
+      const ur=await API.adminUploadPhoto(this.s.adminToken,fd);
+      if(ur.ok){photoUrl=ur.data.url;}
+      else{this.flash('Photo upload failed: '+(ur.error&&ur.error.message),C.red);this.render();return;}
+    }
     API.adminAddBike(this.s.adminToken,{
       name:f.name.trim(),maker:f.maker.trim(),pricePerDay:Number(f.pricePerDay),
       engine:f.engine||'',power:f.power||'',range:f.range||'',
-      kicker:f.kicker||'',photoUrl:f.photoUrl||''
+      kicker:f.kicker||'',photoUrl
     }).then(r=>{
       if(r.ok){
-        this.s.admin.fleet=null;// force reload
+        this.s.admin.fleet=null;
+        this.s.admin.photoFile=null;this.s.admin.photoPreview=null;
         this.flash('Bike added to fleet',C.green);
         this.back();
       }else this.flash((r.error&&r.error.message)||'Add failed',C.red);

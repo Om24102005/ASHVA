@@ -3,6 +3,8 @@
 
 function viewAdminAddBike(app){
   const f=app.s.admin.addBike||{};
+  const preview=app.s.admin.photoPreview||null;
+
   const field=(id,label,placeholder,mode)=>`
     <div style="margin-bottom:14px">
       <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint};margin-bottom:6px">${label}</div>
@@ -34,10 +36,21 @@ function viewAdminAddBike(app){
       ${field('range','RANGE','e.g. 450 km')}
 
       <div style="height:1px;background:${C.line};margin:8px 0 20px"></div>
-      ${eyebrow('// PRICING & MEDIA',C.sun)}
+      ${eyebrow('// PRICING & PHOTO',C.sun)}
       <div style="height:12px"></div>
       ${field('pricePerDay','PRICE PER DAY (₹)','e.g. 1800','decimal')}
-      ${field('photoUrl','PHOTO URL','https://images.unsplash.com/…')}
+
+      <div style="margin-bottom:14px">
+        <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint};margin-bottom:8px">BIKE PHOTO</div>
+        ${preview?`<div style="width:100%;height:180px;background:${C.surf};border:1px solid ${C.ember};overflow:hidden;margin-bottom:10px"><img src="${preview}" style="width:100%;height:100%;object-fit:cover"></div>`:''}
+        <label for="photoFileIn" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;background:${C.surf};border:1px dashed ${preview?C.ember:C.line};cursor:pointer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${C.amber}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span style="font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${preview?C.amber:C.dim}">${preview?'CHANGE PHOTO':'SELECT FROM GALLERY'}</span>
+        </label>
+        <input id="photoFileIn" type="file" accept="image/*" style="display:none">
+        <div style="font-family:${F.m};font-size:9px;color:${C.faint};margin-top:8px;text-align:center">— or paste a URL —</div>
+      </div>
+      ${field('photoUrl','PHOTO URL (optional)','https://images.unsplash.com/…')}
     </div>
 
     ${bottomBtn('ADD TO FLEET →','submitaddbike')}

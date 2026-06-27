@@ -56,6 +56,7 @@ window.API = (function () {
     adminFleet: (tok) => req('/admin/fleet', { token: tok }),
     adminToggle: (tok, id, status) => req('/admin/fleet/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminAddBike: (tok, data) => req('/admin/fleet', { method: 'POST', body: data, token: tok }),
+    adminUploadPhoto: (tok, formData) => req('/admin/fleet/upload-photo', { method: 'POST', form: formData, token: tok }),
     adminBookings: (tok) => req('/admin/bookings', { token: tok }),
     adminBookingStatus: (tok, id, status) => req('/admin/bookings/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminUsers: (tok) => req('/admin/users', { token: tok }),

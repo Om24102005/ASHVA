@@ -1,6 +1,4 @@
-/** Idempotent schema bootstrap. Runs init.sql once over the (internal) pool if
- *  the schema isn't present yet — so a fresh managed Postgres self-initializes
- *  on first deploy, with no external DB exposure. */
+/** Idempotent schema bootstrap + incremental migrations. */
 import fs from 'fs';
 import path from 'path';
 import { pool } from './db.js';
@@ -20,4 +18,20 @@ export async function ensureSchema(): Promise<void> {
   const sql = fs.readFileSync(file, 'utf8');
   await pool.query(sql);
   console.log('[db] schema initialized');
+}
+
+export async function runMigrations(): Promise<void> {
+  // M001: add photo_url column to assets
+  const { rows } = await pool.query(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name='assets' AND column_name='photo_url'
+  `);
+  if (!rows.length) {
+    await pool.query(`
+      ALTER TABLE assets ADD COLUMN photo_url text;
+      UPDATE assets SET photo_url = specs->>'photoUrl'
+        WHERE specs->>'photoUrl' IS NOT NULL AND specs->>'photoUrl' != '';
+    `);
+    console.log('[db] M001: added photo_url to assets');
+  }
 }

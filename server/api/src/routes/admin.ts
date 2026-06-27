@@ -1,12 +1,16 @@
 /** Admin routes — fleet management, bookings, users, KYC. Admin-JWT gated. */
 import crypto from 'crypto';
+import multer from 'multer';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../db.js';
 import { asyncHandler, unauthorized, bad, notFound } from '../http.js';
 import { signToken, verifyToken } from '../auth/jwt.js';
+import { uploadObject } from '../providers/storage.js';
 import { env } from '../env.js';
 import type { Request, Response, NextFunction } from 'express';
+
+const uploadMW = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export const adminRouter = Router();
 
@@ -80,9 +84,22 @@ adminRouter.get(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const { rows } = await query(
-      "SELECT id,slug,name,maker,type,status,price_per_day,rating,specs,created_at FROM assets WHERE status != 'retired' ORDER BY created_at ASC",
+      "SELECT id,slug,name,maker,type,status,price_per_day,rating,specs,photo_url,created_at FROM assets WHERE status != 'retired' ORDER BY created_at ASC",
     );
     res.json({ assets: rows });
+  }),
+);
+
+adminRouter.post(
+  '/fleet/upload-photo',
+  requireAdmin,
+  uploadMW.single('photo'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw bad('No photo file.');
+    const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const key = `bikes/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    const url = await uploadObject(key, req.file.buffer, req.file.mimetype);
+    res.json({ ok: true, data: { url } });
   }),
 );
 
@@ -146,11 +163,11 @@ adminRouter.post(
       '-' +
       Date.now().toString(36);
 
-    const specs = { kicker: b.kicker, engine: b.engine, power: b.power, range: b.range, photoUrl: b.photoUrl };
+    const specs = { kicker: b.kicker, engine: b.engine, power: b.power, range: b.range };
     const { rows } = await query(
-      `INSERT INTO assets (slug, name, maker, type, price_per_day, specs)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [slug, b.name, b.maker, b.type, b.pricePerDay, JSON.stringify(specs)],
+      `INSERT INTO assets (slug, name, maker, type, price_per_day, specs, photo_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [slug, b.name, b.maker, b.type, b.pricePerDay, JSON.stringify(specs), b.photoUrl || null],
     );
     res.json({ asset: rows[0] });
   }),

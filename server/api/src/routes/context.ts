@@ -22,6 +22,7 @@ contextRouter.get(
         pricePerDay: Number(r.price_per_day),
         rating: r.rating != null ? Number(r.rating) : null,
         specs: r.specs ?? {},
+        photoUrl: r.photo_url ?? null,
       })),
     });
   }),
