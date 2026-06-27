@@ -2,7 +2,7 @@
 /* ASHVA · API client — talks to the real backend. Token in localStorage.
    Every call resolves to {ok:true,data} or {ok:false,error}; never throws. */
 window.API = (function () {
-  const base = () => (window.ASHVA && window.ASHVA.API) || 'https://ashva-api.onrender.com';
+  const base = () => (window.ASHVA && window.ASHVA.API) || 'https://ashva-api-bb5c.onrender.com';
   const TKEY = 'ashva.token', SKEY = 'ashva.session';
 
   function getToken() { try { return localStorage.getItem(TKEY) || null; } catch { return null; } }
