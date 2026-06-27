@@ -13,11 +13,18 @@ const client = new S3Client({
 export async function ensureBucket(): Promise<void> {
   try {
     await client.send(new HeadBucketCommand({ Bucket: env.s3.bucket }));
-  } catch {
-    try {
-      await client.send(new CreateBucketCommand({ Bucket: env.s3.bucket }));
-    } catch (e) {
-      console.warn('[storage] could not ensure bucket:', e instanceof Error ? e.message : e);
+  } catch (e: unknown) {
+    const status = (e as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+    if (status === 404 || status === undefined) {
+      // Bucket doesn't exist — try to create it.
+      try {
+        await client.send(new CreateBucketCommand({ Bucket: env.s3.bucket }));
+      } catch (ce) {
+        console.warn('[storage] could not create bucket:', ce instanceof Error ? ce.message : ce);
+      }
+    } else {
+      // 403 / 5xx — real error; log loudly rather than silently ignoring it.
+      console.error('[storage] HeadBucket failed (status', status, '):', e instanceof Error ? e.message : e);
     }
   }
 }

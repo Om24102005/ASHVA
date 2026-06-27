@@ -7,7 +7,23 @@ function viewAuth(app){
     <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,.35) 0%,rgba(23,17,13,.1) 25%,rgba(23,17,13,.6) 65%,#17110D 88%)"></div>
     <div class="sweep"></div>`;
   let body;
-  if(a.step==='enter'){
+  if(a.step==='admin_pw'){
+    body=`
+      <div class="stg" style="animation-delay:.05s;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(226,84,42,.08);border:1px solid rgba(226,84,42,.2);margin-bottom:18px">
+        ${crest(18,C.ember)}
+        <div>
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.2em;color:${C.ember}">ADMIN ACCESS</div>
+          <div style="font-family:${F.g};font-size:13px;color:${C.dim}">${a.val}</div>
+        </div>
+      </div>
+      <div class="stg" style="animation-delay:.1s;font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint};margin-bottom:6px">PASSWORD</div>
+      <div class="stg" style="animation-delay:.1s;display:flex;align-items:center;padding:16px 18px;background:${C.surf};border:1px solid ${C.ember};margin-bottom:14px">
+        <input id="adminPwIn" type="password" placeholder="Enter admin password" value="${a.adminPw||''}" autocomplete="current-password"
+          style="flex:1;background:none;border:none;outline:none;color:${C.ink};font-family:${F.g};font-size:16px;font-weight:500">
+      </div>
+      <div id="adminLoginBtn" class="stg press" data-act="adminlogin" style="animation-delay:.15s;text-align:center;padding:17px;background:${C.ember};color:#fff;font-family:${F.m};font-size:12px;letter-spacing:.18em">ENTER ADMIN PANEL</div>
+      <div class="stg press" data-act="achange" style="animation-delay:.2s;text-align:center;margin-top:18px;font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.faint}">‹ BACK</div>`;
+  }else if(a.step==='enter'){
     const valid=authValid(app);
     const seg=(m,l)=>`<div class="press" data-act="amode" data-m="${m}" style="flex:1;text-align:center;padding:11px;font-family:${F.m};font-size:11px;letter-spacing:.14em;color:${a.mode===m?C.ink:C.faint};background:${a.mode===m?'rgba(244,235,221,.06)':'transparent'};border:1px solid ${a.mode===m?C.line:'transparent'}">${l}</div>`;
     const input=a.mode==='email'

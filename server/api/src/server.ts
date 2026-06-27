@@ -12,6 +12,7 @@ import { contactRouter } from './routes/contact.js';
 import { kycRouter } from './routes/kyc.js';
 import { bookingsRouter } from './routes/bookings.js';
 import { contextRouter } from './routes/context.js';
+import { adminRouter } from './routes/admin.js';
 import { ensureBucket } from './providers/storage.js';
 
 async function main(): Promise<void> {
@@ -20,7 +21,13 @@ async function main(): Promise<void> {
   await ensureBucket();
 
   const app = express();
-  app.use(cors());
+  // In production, set CORS_ORIGIN to a comma-separated list of allowed origins.
+  // Default (empty) allows all origins for local dev / Render previews.
+  const allowedOrigins = (process.env['CORS_ORIGIN'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors(allowedOrigins.length ? {
+    origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin)),
+    credentials: true,
+  } : undefined));
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
@@ -39,6 +46,7 @@ async function main(): Promise<void> {
   app.use('/kyc', kycRouter);
   app.use('/bookings', bookingsRouter);
   app.use('/context', contextRouter);
+  app.use('/admin', adminRouter);
 
   app.use(errorMiddleware);
 

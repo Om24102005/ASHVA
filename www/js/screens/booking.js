@@ -1,10 +1,10 @@
 "use strict";
-/* SCREEN · Booking Step 1 — premium hub selector, date strip, telemetry summary */
+/* SCREEN · Booking Step 1 — premium hub selector, calendar date picker, telemetry summary */
 
 function viewBooking(app){
   const bk=app.s.bk;const b=bike(bk.bikeId);
-  const dates=[];for(let d=1;d<=30;d++)dates.push(d);
-  const endD=bk.date+bk.days;
+  const today=new Date().toISOString().slice(0,10);
+  const endD=dateAddDays(bk.date,bk.days);
   const bikeTotal=b.price*bk.days;
   const gearDaily=gearPerDay(app);
   const gearTotal=gearDaily*bk.days;
@@ -53,27 +53,29 @@ function viewBooking(app){
       </div>`;}).join('')}
     </div>
 
-    <div style="padding:28px 24px 6px">
+    <div style="padding:28px 24px 14px">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <span style="width:18px;height:1px;background:${C.ember}"></span>
             ${eyebrow('START DATE',C.amber)}
           </div>
-          <div style="font-family:${F.s};font-size:24px;line-height:1">June 2026</div>
+          <div style="font-family:${F.s};font-size:24px;line-height:1">${dateLabel(bk.date)}</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint}">WINDOW</div>
-          <div style="font-family:${F.g};font-weight:600;font-size:14px;color:${C.sun};margin-top:3px">${dlabel(bk.date)} – ${dlabel(endD>30?endD-30:endD)}</div>
+          <div style="font-family:${F.g};font-weight:600;font-size:14px;color:${C.sun};margin-top:3px">${dateLabel(bk.date)} – ${dateLabel(endD)}</div>
         </div>
       </div>
-    </div>
-    <div class="noscroll" style="display:flex;gap:8px;overflow-x:auto;padding:8px 24px 4px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch">
-      ${dates.map(d=>{const a=bk.date===d;const dow=['S','M','T','W','T','F','S'][(d-1)%7];const inWindow=d>=bk.date&&d<endD;return `<div class="press" data-act="date" data-d="${d}" style="position:relative;min-width:54px;scroll-snap-align:start;text-align:center;padding:14px 0;background:${a?C.ember:inWindow?'rgba(226,84,42,.06)':C.surf};border:1px solid ${a?C.ember:inWindow?'rgba(226,84,42,.25)':C.line};color:${a?'#fff':C.ink}">
-        <div style="font-family:${F.m};font-size:9px;letter-spacing:.14em;color:${a?'rgba(255,255,255,.7)':C.faint}">${dow}</div>
-        <div style="font-family:${F.g};font-weight:700;font-size:20px;margin-top:4px">${d}</div>
-        ${inWindow&&!a?`<div style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:${C.ember}"></div>`:''}
-      </div>`;}).join('')}
+      <div style="position:relative;display:flex;align-items:center;gap:14px;padding:16px 18px;background:${C.surf};border:1px solid ${C.ember}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${C.ember}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="1.5"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <div style="flex:1">
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.16em;color:${C.faint};margin-bottom:3px">PICKUP DATE</div>
+          <div style="font-family:${F.g};font-weight:600;font-size:16px;color:${C.ink}">${dateLabel(bk.date)}</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        <input type="date" id="datePicker" value="${bk.date}" min="${today}" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;-webkit-appearance:none">
+      </div>
     </div>
 
     <div style="padding:24px">
@@ -87,7 +89,7 @@ function viewBooking(app){
         <div class="press" data-act="dur" data-v="-1" style="width:60px;display:flex;align-items:center;justify-content:center;font-size:30px;color:${bk.days>1?C.ink:C.faint};background:${C.well};font-family:${F.g};font-weight:300;cursor:${bk.days>1?'pointer':'not-allowed'}">−</div>
         <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center">
           <div style="font-family:${F.g};font-weight:700;font-size:34px;line-height:1;color:${C.ink}">${bk.days}<span style="font-size:13px;color:${C.faint};font-weight:400;letter-spacing:.12em;margin-left:6px">DAYS</span></div>
-          <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.dim};margin-top:6px">${dlabel(bk.date)} → ${dlabel(endD>30?endD-30:endD)}</div>
+          <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.dim};margin-top:6px">${dateLabel(bk.date)} → ${dateLabel(endD)}</div>
         </div>
         <div class="press" data-act="dur" data-v="1" style="width:60px;display:flex;align-items:center;justify-content:center;font-size:28px;color:${bk.days<30?C.ink:C.faint};background:${C.well};font-family:${F.g};font-weight:300">+</div>
       </div>

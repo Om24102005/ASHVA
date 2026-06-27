@@ -212,7 +212,7 @@ function mountHome(app){
   app.hi=0;
   setHero(app,0,false);
   const hero=$('#hero');if(!hero)return;
-  startHeroTimer();
+  startHeroTimer(app);
 
   /* hover feedback for garage rows (press fallback on touch) */
   document.querySelectorAll('[data-act="bike"]').forEach(r=>{

@@ -24,7 +24,7 @@ window.API = (function () {
     else if (body !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 20000);
+      const t = setTimeout(() => ctrl.abort(), 55000);
       const res = await fetch(base() + path, { method: o.method || 'GET', headers, body, signal: ctrl.signal });
       clearTimeout(t);
       const text = await res.text();
@@ -34,7 +34,7 @@ window.API = (function () {
       return { ok: true, data };
     } catch (e) {
       const ab = e && e.name === 'AbortError';
-      return { ok: false, error: { code: ab ? 'TIMEOUT' : 'NETWORK', message: ab ? 'The request timed out.' : 'Network error — is the backend running and reachable?' } };
+      return { ok: false, error: { code: ab ? 'TIMEOUT' : 'NETWORK', message: ab ? 'Server is starting up — wait 30 s and try again.' : 'Network error — check your connection.' } };
     }
   }
 
@@ -50,7 +50,18 @@ window.API = (function () {
     kycSubmit: (form) => req('/kyc/submit', { method: 'POST', form }),
     assets: () => req('/context/assets'),
     bookingCreate: (p) => req('/bookings', { method: 'POST', body: p }),
-    bookings: () => req('/bookings')
+    bookings: () => req('/bookings'),
+    adminAuth: (email, password) => req('/admin/auth', { method: 'POST', body: { email, password }, token: null }),
+    adminStats: (tok) => req('/admin/stats', { token: tok }),
+    adminFleet: (tok) => req('/admin/fleet', { token: tok }),
+    adminToggle: (tok, id, status) => req('/admin/fleet/'+id, { method: 'PATCH', body: { status }, token: tok }),
+    adminAddBike: (tok, data) => req('/admin/fleet', { method: 'POST', body: data, token: tok }),
+    adminBookings: (tok) => req('/admin/bookings', { token: tok }),
+    adminBookingStatus: (tok, id, status) => req('/admin/bookings/'+id, { method: 'PATCH', body: { status }, token: tok }),
+    adminUsers: (tok) => req('/admin/users', { token: tok }),
+    adminUserStatus: (tok, id, status) => req('/admin/users/'+id, { method: 'PATCH', body: { status }, token: tok }),
+    adminKyc: (tok) => req('/admin/kyc', { token: tok }),
+    adminKycVerdict: (tok, id, status) => req('/admin/kyc/'+id, { method: 'PATCH', body: { status }, token: tok })
   };
 })();
 

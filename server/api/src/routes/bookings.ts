@@ -1,7 +1,8 @@
 /** Bookings — create against a real asset (server computes the fare), list own. */
+import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { query } from '../db.js';
+import { pool, query } from '../db.js';
 import { asyncHandler, bad, notFound } from '../http.js';
 import { requireAuth } from '../auth/middleware.js';
 
@@ -10,6 +11,16 @@ bookingsRouter.use(requireAuth);
 
 const INSURANCE_PER_DAY = 199;
 const HUB_HANDLING = 299;
+
+// Server-authoritative gear prices — never accepted from the client.
+const GEAR_PRICES: Record<string, number> = {
+  cam: 400,
+  jkt: 350,
+  comm: 250,
+  boot: 300,
+  bag: 200,
+  glove: 150,
+};
 
 function mapBooking(r: Record<string, unknown>): unknown {
   return {
@@ -54,33 +65,59 @@ bookingsRouter.get(
 bookingsRouter.post(
   '/',
   asyncHandler(async (req, res) => {
+    // Accept gear id+name only; price is always looked up server-side.
     const { assetId, days, hub, gear } = z
       .object({
         assetId: z.string().uuid(),
         days: z.number().int().min(1).max(60),
         hub: z.string().optional().default('Manali'),
-        gear: z.array(z.object({ id: z.string(), name: z.string(), pricePerDay: z.number() })).optional().default([]),
+        gear: z.array(z.object({ id: z.string(), name: z.string() })).optional().default([]),
       })
       .parse(req.body);
 
-    const assetRes = await query('SELECT * FROM assets WHERE id = $1', [assetId]);
-    const asset = assetRes.rows[0];
-    if (!asset) throw notFound('Asset not found.');
-    if (asset.status !== 'available') throw bad('That asset is not available right now.');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const gearPerDay = gear.reduce((s, g) => s + g.pricePerDay, 0);
-    const total = (Number(asset.price_per_day) + INSURANCE_PER_DAY + gearPerDay) * days + HUB_HANDLING;
-    const ref = 'ASH-' + Math.floor(1000 + Math.random() * 9000);
-    const start = new Date();
-    const end = new Date(Date.now() + days * 86400000);
-    const geofence = asset.latitude != null ? { center: { latitude: Number(asset.latitude), longitude: Number(asset.longitude) }, radiusM: 500 } : {};
+      // Lock the asset row to prevent concurrent double-bookings.
+      const assetRes = await client.query('SELECT * FROM assets WHERE id = $1 FOR UPDATE', [assetId]);
+      const asset = assetRes.rows[0];
+      if (!asset) throw notFound('Asset not found.');
+      if (asset.status !== 'available') throw bad('That asset is not available right now.');
 
-    const ins = await query(
-      `INSERT INTO bookings (reference, user_id, asset_id, status, hub, start_ts, end_ts, days, gear, total_amount, geofence)
-       VALUES ($1,$2,$3,'confirmed',$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [ref, req.auth!.sub, assetId, hub, start.toISOString(), end.toISOString(), days, JSON.stringify(gear), total, JSON.stringify(geofence)],
-    );
-    const { rows } = await query(`${SELECT} WHERE b.id = $1`, [ins.rows[0]!.id]);
-    res.json({ booking: mapBooking(rows[0]!) });
+      // Resolve gear prices server-side; skip unknown gear IDs.
+      const resolvedGear = gear
+        .filter(g => GEAR_PRICES[g.id] !== undefined)
+        .map(g => ({ id: g.id, name: g.name, pricePerDay: GEAR_PRICES[g.id]! }));
+      const gearPerDay = resolvedGear.reduce((s, g) => s + g.pricePerDay, 0);
+      const total = (Number(asset.price_per_day) + INSURANCE_PER_DAY + gearPerDay) * days + HUB_HANDLING;
+
+      // Collision-resistant reference: ASH- + 8 random hex chars (~4 billion space).
+      const ref = 'ASH-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      const start = new Date();
+      const end = new Date(Date.now() + days * 86400000);
+      const geofence = asset.latitude != null
+        ? { center: { latitude: Number(asset.latitude), longitude: Number(asset.longitude) }, radiusM: 500 }
+        : {};
+
+      const ins = await client.query(
+        `INSERT INTO bookings (reference, user_id, asset_id, status, hub, start_ts, end_ts, days, gear, total_amount, geofence)
+         VALUES ($1,$2,$3,'confirmed',$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [ref, req.auth!.sub, assetId, hub, start.toISOString(), end.toISOString(), days, JSON.stringify(resolvedGear), total, JSON.stringify(geofence)],
+      );
+
+      // Mark asset unavailable so subsequent requests see the correct status.
+      await client.query(`UPDATE assets SET status = 'booked' WHERE id = $1`, [assetId]);
+
+      await client.query('COMMIT');
+
+      const { rows } = await query(`${SELECT} WHERE b.id = $1`, [ins.rows[0]!.id]);
+      res.json({ booking: mapBooking(rows[0]!) });
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
   }),
 );

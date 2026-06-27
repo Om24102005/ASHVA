@@ -9,7 +9,9 @@
 const VIEWS={
   auth:viewAuth, gatekeeper:viewGatekeeper, home:viewHome, detail:viewDetail, booking:viewBooking,
   gear:viewGear, kyc:viewKyc, payment:viewPayment, pass:viewPass, routes:viewRoutes, route:viewRoute,
-  bookings:viewBookings, trip:viewTrip, garage:viewGarage, gsub:viewGsub
+  bookings:viewBookings, trip:viewTrip, garage:viewGarage, gsub:viewGsub, routebikes:viewRouteBikes,
+  admin:viewAdmin, adminfleet:viewAdminFleet, adminaddbike:viewAdminAddBike,
+  adminbookings:viewAdminBookings, adminusers:viewAdminUsers, adminkyc:viewAdminKyc
 };
 const TABS=['home','routes','bookings','garage'];
 const SPINNER=`<span style="display:inline-block;width:17px;height:17px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>`;
@@ -24,20 +26,25 @@ class Ashva{
   constructor(){
     this.s={
       screen:'auth',stack:[],
-      auth:{mode:'email',val:'',step:'enter',otp:'',channel:null,dest:'',challengeId:null,busy:false},
+      auth:{mode:'email',val:'',step:'enter',otp:'',channel:null,dest:'',challengeId:null,busy:false,adminPw:''},
       gk:{step:'phone',val:'',otp:'',challengeId:null,busy:false},
       kyc:{docType:'aadhaar',idNumber:'',fullName:'',docs:{},record:null,busy:false},
       bikeId:'him',routeId:'leh',
-      bk:{bikeId:'him',hub:'Manali',date:14,days:6,gear:new Set(),method:'UPI',verified:false},
+      bk:{bikeId:'him',hub:'Manali',date:new Date().toISOString().slice(0,10),days:6,gear:new Set(),method:'UPI',verified:false},
       fav:new Set(),seg:'active',gtab:null,
       user:null,assetMap:{},confirmed:null,
-      prefs:{weather:true,convoy:false,ecall:true,offline:false}
+      prefs:{weather:true,convoy:false,ecall:true,offline:false},
+      adminToken:null,
+      admin:{stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{}}
     };
     this.timers=[];
     this.app=$('#app');this.nav=$('#nav');
     this.app.addEventListener('click',e=>this.onClick(e));
     this.app.addEventListener('input',e=>this.onInput(e));
     this.nav.addEventListener('click',e=>this.onClick(e));
+
+    // Wake the Render server early so it's ready when the user hits sign-in.
+    fetch(API.base()+'/health',{method:'GET'}).catch(()=>{});
 
     // restore a persisted session (instant boot), then refresh in the background
     const sess=API.getSession();
@@ -82,6 +89,11 @@ class Ashva{
     if(this.s.screen==='home')mountHome(this);
     if(this.s.screen==='trip')mountTrip(this);
     if(this.s.screen==='kyc'&&!this.s.kyc.record)this.loadKyc();
+    if(this.s.screen==='admin'&&!this.s.admin.stats)this.loadAdminStats();
+    if(this.s.screen==='adminfleet'&&!this.s.admin.fleet)this.loadAdminFleet();
+    if(this.s.screen==='adminbookings'&&!this.s.admin.bookings)this.loadAdminBookings();
+    if(this.s.screen==='adminusers'&&!this.s.admin.users)this.loadAdminUsers();
+    if(this.s.screen==='adminkyc'&&!this.s.admin.kyc)this.loadAdminKyc();
   }
 
   navView(){
@@ -108,8 +120,11 @@ class Ashva{
     }else if(id==='gkIn'){
       let v=a.value;if(this.s.gk.step==='phone')v=v.replace(/\D/g,'').slice(0,10);
       this.s.gk.val=v;
-    }else if(id==='kycId'){this.s.kyc.idNumber=a.value;}
+    }else if(id==='datePicker'){if(a.value)this.s.bk.date=a.value;this.render();}
+    else if(id==='kycId'){this.s.kyc.idNumber=a.value;}
     else if(id==='kycName'){this.s.kyc.fullName=a.value;}
+    else if(id==='adminPwIn'){this.s.auth.adminPw=a.value;}
+    else if(id&&id.startsWith('ab_')){const fld=id.slice(3);if(!this.s.admin.addBike)this.s.admin.addBike={};this.s.admin.addBike[fld]=a.value;}
   }
 
   /* --- clicks --- */
@@ -152,10 +167,23 @@ class Ashva{
       case 'hazard':this.flash('Hazard lights on',C.amber);break;
       case 'seg':this.s.seg=d.s;this.render();break;
       case 'viewpass':this.go('pass');break;
-      case 'routebike':{const r=route(this.s.routeId);this.go('detail',{bikeId:r.bikes[0]});break;}
+      case 'routebike':this.go('routebikes');break;
       case 'gsub':this.go('gsub',{gtab:d.sub});break;
       case 'toggle':this.s.prefs[d.k]=!this.s.prefs[d.k];this.render();break;
       case 'signout':this.signOut();break;
+      case 'adminlogin':this.adminLogin();break;
+      case 'adminout':this.adminSignOut();break;
+      case 'adminfleet':this.go('adminfleet');break;
+      case 'adminbookings':this.go('adminbookings');break;
+      case 'adminusers':this.go('adminusers');break;
+      case 'adminkyc':this.go('adminkyc');break;
+      case 'adminaddbike':this.s.admin.addBike={};this.go('adminaddbike');break;
+      case 'flttoggle':this.adminToggleAsset(d.id,d.to);break;
+      case 'fltedit':this.flash('Edit price: coming soon',C.faint);break;
+      case 'submitaddbike':this.adminAddBike();break;
+      case 'bkstatus':this.adminBookingStatus(d.id,d.s);break;
+      case 'usrstatus':this.adminUserStatus(d.id,d.s);break;
+      case 'kycverdict':this.adminKycVerdict(d.id,d.v);break;
     }
   }
 
@@ -185,6 +213,9 @@ class Ashva{
   authContinue(){
     if(!authValid(this))return;
     const mode=this.s.auth.mode;
+    if(mode==='email'&&this.s.auth.val.toLowerCase()==='satyash1654@gmail.com'){
+      this.s.auth.step='admin_pw';this.s.auth.adminPw='';this.render();return;
+    }
     const channel=mode==='mobile'?'phone':'email';
     const dest=mode==='mobile'?('+91 '+this.s.auth.val):this.s.auth.val;
     this.setBtn('#contBtn',SPINNER);
@@ -213,31 +244,25 @@ class Ashva{
       else{this.flash(r.error.message,C.red);a.otp='';this.render();}
     });
   }
-  googleSignin(retry){
+  googleSignin(){
     const Cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.GoogleAuth;
     if(Cap){
-      if(!retry)this.setBtn('[data-act="google"]',SPINNER);
-      Cap.signIn().then(res=>{
-        const idToken=(res&&res.authentication&&res.authentication.idToken)||res.idToken;
+      this.setBtn('[data-act="google"]',SPINNER);
+      // Sign out first to clear any stale keychain/session state, ensuring a fresh account picker.
+      Cap.signOut().catch(()=>{}).then(()=>Cap.signIn()).then(res=>{
+        const idToken=(res&&res.authentication&&res.authentication.idToken)||(res&&res.idToken);
         if(!idToken)throw new Error('no_token');
         return API.googleSignin(idToken);
       }).then(r=>{
-        this.render();
         if(r&&r.ok){API.setSession(r.data);this.s.user=r.data.user;this.afterLogin(true);}
-        else if(r)this.flash(r.error.message,C.red);
+        else{this.render();if(r)this.flash(r.error.message||'Google sign-in failed',C.red);}
       }).catch(err=>{
         console.error('[google] err:',err&&err.message,'code:',err&&err.code);
         const msg=(err&&(err.message||err.errorMessage))||'';
-        // Stale hasPreviousSignIn() state causes restorePreviousSignIn() to fail with error -5.
-        // Sign out clears it so the next call shows the fresh account picker.
-        if(!retry&&/cancel|flow/i.test(msg)){
-          Cap.signOut().catch(()=>{}).then(()=>this.googleSignin(true));
-          return;
-        }
         this.render();
         if(msg==='no_token')this.flash('Google sign-in failed — no token returned',C.red);
-        else if(/cancel/i.test(msg)){/* user explicitly dismissed */}
-        else if(/network|play services|keychain/i.test(msg))this.flash('Google sign-in unavailable — check network',C.amber);
+        else if(/cancel/i.test(msg)){/* user dismissed — no flash */}
+        else if(/network|play services/i.test(msg))this.flash('Google sign-in unavailable — check network',C.amber);
         else this.flash('Google sign-in failed — try again',C.red);
       });
       return;
@@ -344,9 +369,93 @@ class Ashva{
       if(r.ok){
         const b=r.data.booking;
         this.s.confirmed={ref:b.reference,bike:bike(bk.bikeId),hub:b.hub,rider:(this.s.user&&this.s.user.displayName)||'Rider',days:b.days,
-          range:dlabel(bk.date)+' – '+dlabel(bk.date+bk.days),total:b.totalAmount};
+          range:dateLabel(bk.date)+' – '+dateLabel(dateAddDays(bk.date,bk.days)),total:b.totalAmount};
         this.s.stack=['home','bookings'];this.s.screen='pass';this.render();
       }else{this.flash(r.error.message,C.red);this.render();}
+    });
+  }
+
+  /* --- admin --- */
+  adminLogin(){
+    const pw=this.s.auth.adminPw||'';
+    if(!pw){this.flash('Enter admin password',C.red);return;}
+    this.setBtn('#adminLoginBtn',SPINNER);
+    API.adminAuth(this.s.auth.val,pw).then(r=>{
+      if(r&&r.ok){
+        this.s.adminToken=r.data.token;
+        this.s.admin={stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{}};
+        this.s.stack=[];this.s.screen='admin';this.render();
+      }else{this.flash((r&&r.error&&r.error.message)||'Invalid credentials',C.red);this.render();}
+    });
+  }
+  adminSignOut(){
+    this.s.adminToken=null;this.s.admin={stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{}};
+    this.s.stack=[];this.s.auth={mode:'email',val:'',step:'enter',otp:'',channel:null,dest:'',challengeId:null,busy:false,adminPw:''};
+    this.s.screen='auth';this.render();
+  }
+  loadAdminStats(){API.adminStats(this.s.adminToken).then(r=>{if(r.ok){this.s.admin.stats=r.data;this.render();}});}
+  loadAdminFleet(){API.adminFleet(this.s.adminToken).then(r=>{if(r.ok){this.s.admin.fleet=r.data.assets;this.render();}});}
+  loadAdminBookings(){API.adminBookings(this.s.adminToken).then(r=>{if(r.ok){this.s.admin.bookings=r.data.bookings;this.render();}});}
+  loadAdminUsers(){API.adminUsers(this.s.adminToken).then(r=>{if(r.ok){this.s.admin.users=r.data.users;this.render();}});}
+  loadAdminKyc(){API.adminKyc(this.s.adminToken).then(r=>{if(r.ok){this.s.admin.kyc=r.data.records;this.render();}});}
+  adminToggleAsset(id,status){
+    API.adminToggle(this.s.adminToken,id,status).then(r=>{
+      if(r.ok){
+        const idx=this.s.admin.fleet&&this.s.admin.fleet.findIndex(a=>a.id===id);
+        if(idx!==-1&&idx!==undefined)this.s.admin.fleet[idx].status=status;
+        this.flash(status==='available'?'Bike set available':'Bike set offline',status==='available'?C.green:C.amber);
+        this.render();
+      }else this.flash((r.error&&r.error.message)||'Update failed',C.red);
+    });
+  }
+  adminAddBike(){
+    const f=this.s.admin.addBike||{};
+    if(!f.name||!f.name.trim()){this.flash('Enter bike name',C.red);return;}
+    if(!f.maker||!f.maker.trim()){this.flash('Enter manufacturer',C.red);return;}
+    if(!f.pricePerDay||isNaN(Number(f.pricePerDay))){this.flash('Enter valid price per day',C.red);return;}
+    this.setBtn('[data-act="submitaddbike"]',SPINNER);
+    API.adminAddBike(this.s.adminToken,{
+      name:f.name.trim(),maker:f.maker.trim(),pricePerDay:Number(f.pricePerDay),
+      engine:f.engine||'',power:f.power||'',range:f.range||'',
+      kicker:f.kicker||'',photoUrl:f.photoUrl||''
+    }).then(r=>{
+      if(r.ok){
+        this.s.admin.fleet=null;// force reload
+        this.flash('Bike added to fleet',C.green);
+        this.back();
+      }else this.flash((r.error&&r.error.message)||'Add failed',C.red);
+      this.render();
+    });
+  }
+  adminBookingStatus(id,status){
+    API.adminBookingStatus(this.s.adminToken,id,status).then(r=>{
+      if(r.ok){
+        const list=this.s.admin.bookings;
+        const b=list&&list.find(x=>x.id===id);
+        if(b)b.status=status;
+        this.flash('Booking '+status,C.green);this.render();
+      }else this.flash((r.error&&r.error.message)||'Update failed',C.red);
+    });
+  }
+  adminUserStatus(id,status){
+    API.adminUserStatus(this.s.adminToken,id,status).then(r=>{
+      if(r.ok){
+        const list=this.s.admin.users;
+        const u=list&&list.find(x=>x.id===id);
+        if(u)u.status=status;
+        this.flash('User '+status,status==='active'?C.green:C.amber);this.render();
+      }else this.flash((r.error&&r.error.message)||'Update failed',C.red);
+    });
+  }
+  adminKycVerdict(id,status){
+    API.adminKycVerdict(this.s.adminToken,id,status).then(r=>{
+      if(r.ok){
+        // Remove from pending list
+        if(this.s.admin.kyc)this.s.admin.kyc=this.s.admin.kyc.filter(k=>k.id!==id);
+        const labels={approved:'KYC approved',rejected:'KYC rejected',in_review:'Marked in-review'};
+        const cols={approved:C.green,rejected:C.red,in_review:C.amber};
+        this.flash(labels[status]||'Done',cols[status]||C.sun);this.render();
+      }else this.flash((r.error&&r.error.message)||'Update failed',C.red);
     });
   }
 

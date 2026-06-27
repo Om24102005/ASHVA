@@ -10,6 +10,8 @@ const rupee=n=>'₹'+n.toLocaleString('en-IN');
 
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function dlabel(day){let m=5,d=day;while(d>30){d-=30;m++;}return MON[m]+' '+d;}
+function dateLabel(iso){const d=new Date(iso+'T00:00:00');return MON[d.getMonth()]+' '+d.getDate();}
+function dateAddDays(iso,days){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+days);return d.toISOString().slice(0,10);}
 
 function bgImg(photo,grad){return `background-image:url('${photo}'),${grad};background-size:cover,cover;background-position:center,center`;}
 

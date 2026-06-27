@@ -12,6 +12,10 @@ import { Session } from '../types.js';
 
 export const authRouter = Router();
 
+// Precomputed hash used as a timing equaliser when the email doesn't exist,
+// preventing an attacker from distinguishing "unknown email" from "wrong password".
+const TIMING_DUMMY_HASH = bcrypt.hashSync('__timing_guard__', 8);
+
 /** Compare the destination an OTP was SENT to against the one being logged into.
  *  Without this, an attacker can request a code to their own contact and redeem
  *  it against a victim's — full account takeover. Phone compares digits only;
@@ -24,6 +28,9 @@ function sameDestination(channel: 'email' | 'phone', a: string, b: string): bool
 async function sessionFor(userId: string, method: Session['method']): Promise<Session> {
   const user = await getUserProfile(userId);
   if (!user) throw unauthorized('Account not found.');
+  if (user.status === 'banned' || user.status === 'suspended') {
+    throw unauthorized('This account has been suspended. Contact support.');
+  }
   await query('UPDATE users SET last_login_at = now() WHERE id = $1', [userId]);
   return { token: signToken(user.id, user.role), user, method };
 }
@@ -61,8 +68,9 @@ authRouter.post(
       [lower],
     );
     const row = rows[0];
-    if (!row) throw unauthorized('Incorrect email or password.');
-    if (!(await bcrypt.compare(password, row.password_hash as string))) throw unauthorized('Incorrect email or password.');
+    const hash = row ? (row.password_hash as string) : TIMING_DUMMY_HASH;
+    // Always run bcrypt.compare — constant-time path prevents email-enumeration via timing.
+    if (!row || !(await bcrypt.compare(password, hash))) throw unauthorized('Incorrect email or password.');
     res.json(await sessionFor(row.id as string, 'email'));
   }),
 );

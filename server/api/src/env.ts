@@ -38,6 +38,8 @@ export const env = {
     from: opt('SMTP_FROM') || opt('SMTP_USER'),
   },
   googleClientIds: opt('GOOGLE_CLIENT_IDS').split(',').map((s) => s.trim()).filter(Boolean),
+  adminEmail: opt('ADMIN_EMAIL', ''),
+  adminPassword: opt('ADMIN_PASSWORD', ''),
   s3: {
     endpoint: opt('S3_ENDPOINT', 'http://minio:9000'),
     publicUrl: opt('S3_PUBLIC_URL', 'http://localhost:9000'),
