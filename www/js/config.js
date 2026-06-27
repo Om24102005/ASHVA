@@ -6,6 +6,6 @@
    (find it: `ipconfig getifaddr en0`)
    Optionally set GOOGLE_WEB_CLIENT_ID for Capacitor Google sign-in. */
 window.ASHVA = {
-  API: 'https://ashva-api.onrender.com',
+  API: 'https://ashva-api-bb5c.onrender.com',
   GOOGLE_WEB_CLIENT_ID: '994367484524-mbck2l7i6656411ki3l0nrtfjq817dev.apps.googleusercontent.com'
 };
