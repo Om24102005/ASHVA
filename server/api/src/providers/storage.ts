@@ -3,14 +3,17 @@ import { S3Client, PutObjectCommand, CreateBucketCommand, HeadBucketCommand } fr
 import { env } from '../env.js';
 import { ApiError } from '../http.js';
 
-const client = new S3Client({
+const s3Enabled = !!(env.s3.accessKey && env.s3.secretKey);
+
+const client = s3Enabled ? new S3Client({
   endpoint: env.s3.endpoint,
   region: env.s3.region,
   forcePathStyle: true,
   credentials: { accessKeyId: env.s3.accessKey, secretAccessKey: env.s3.secretKey },
-});
+}) : null;
 
 export async function ensureBucket(): Promise<void> {
+  if (!s3Enabled || !client) { console.warn('[storage] S3 not configured — KYC uploads disabled.'); return; }
   try {
     await client.send(new HeadBucketCommand({ Bucket: env.s3.bucket }));
   } catch (e: unknown) {
@@ -30,6 +33,7 @@ export async function ensureBucket(): Promise<void> {
 }
 
 export async function uploadObject(key: string, body: Buffer, contentType: string): Promise<string> {
+  if (!s3Enabled || !client) throw new ApiError(503, 'STORAGE_DISABLED', 'KYC storage not configured.');
   try {
     await client.send(new PutObjectCommand({ Bucket: env.s3.bucket, Key: key, Body: body, ContentType: contentType }));
     return `${env.s3.publicUrl.replace(/\/$/, '')}/${env.s3.bucket}/${key}`;

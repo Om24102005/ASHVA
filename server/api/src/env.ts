@@ -45,7 +45,7 @@ export const env = {
     publicUrl: opt('S3_PUBLIC_URL', 'http://localhost:9000'),
     region: opt('S3_REGION', 'us-east-1'),
     bucket: opt('S3_BUCKET', 'kyc'),
-    accessKey: req('S3_ACCESS_KEY'),
-    secretKey: req('S3_SECRET_KEY'),
+    accessKey: opt('S3_ACCESS_KEY'),
+    secretKey: opt('S3_SECRET_KEY'),
   },
 };
