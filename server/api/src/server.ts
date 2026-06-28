@@ -13,6 +13,7 @@ import { kycRouter } from './routes/kyc.js';
 import { bookingsRouter } from './routes/bookings.js';
 import { contextRouter } from './routes/context.js';
 import { adminRouter } from './routes/admin.js';
+import { streamRouter } from './routes/stream.js';
 import { ensureBucket } from './providers/storage.js';
 
 async function main(): Promise<void> {
@@ -48,6 +49,10 @@ async function main(): Promise<void> {
   app.use('/bookings', bookingsRouter);
   app.use('/context', contextRouter);
   app.use('/admin', adminRouter);
+  // /stream lives under /context so the real-time fleet feed sits next to the
+  // REST fleet endpoint. Version + SSE both require auth (Bearer header or
+  // ?token= for EventSource).
+  app.use('/context', streamRouter);
 
   app.use(errorMiddleware);
 

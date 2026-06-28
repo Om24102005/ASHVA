@@ -1,10 +1,13 @@
-/** Bookings — create against a real asset (server computes the fare), list own. */
+/** Bookings — create against a real asset (server computes the fare), list own.
+ *  When a booking is created the asset flips to 'booked' and we publish an
+ *  'asset' event so other user panels see it disappear in real time. */
 import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool, query } from '../db.js';
 import { asyncHandler, bad, notFound } from '../http.js';
 import { requireAuth } from '../auth/middleware.js';
+import { emit } from '../bus.js';
 
 export const bookingsRouter = Router();
 bookingsRouter.use(requireAuth);
@@ -48,6 +51,23 @@ function mapBooking(r: Record<string, unknown>): unknown {
   };
 }
 
+/** Map a raw `assets` row to the public snapshot shape. Mirrors the helper
+ *  in routes/admin.ts so admins and users always see identical payloads. */
+function assetSnapshot(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: row['id'],
+    slug: row['slug'],
+    name: row['name'],
+    maker: row['maker'],
+    type: row['type'],
+    status: row['status'],
+    pricePerDay: row['price_per_day'] != null ? Number(row['price_per_day']) : null,
+    rating: row['rating'] != null ? Number(row['rating']) : null,
+    specs: row['specs'] ?? {},
+    photoUrl: row['photo_url'] ?? null,
+  };
+}
+
 const SELECT = `
   SELECT b.*, a.slug AS asset_slug, a.name AS asset_name, a.maker AS asset_maker,
          a.price_per_day AS asset_price, a.specs AS asset_specs
@@ -76,6 +96,7 @@ bookingsRouter.post(
       .parse(req.body);
 
     const client = await pool.connect();
+    let updatedAsset: Record<string, unknown> | null = null;
     try {
       await client.query('BEGIN');
 
@@ -107,7 +128,11 @@ bookingsRouter.post(
       );
 
       // Mark asset unavailable so subsequent requests see the correct status.
-      await client.query(`UPDATE assets SET status = 'booked' WHERE id = $1`, [assetId]);
+      const upd = await client.query(
+        `UPDATE assets SET status = 'booked' WHERE id = $1 RETURNING *`,
+        [assetId],
+      );
+      updatedAsset = upd.rows[0] as Record<string, unknown>;
 
       await client.query('COMMIT');
 
@@ -118,6 +143,10 @@ bookingsRouter.post(
       throw e;
     } finally {
       client.release();
+      // Emit AFTER the client is released so a slow subscriber can't block the DB.
+      if (updatedAsset) {
+        emit('asset', { kind: 'update', asset: assetSnapshot(updatedAsset) });
+      }
     }
   }),
 );

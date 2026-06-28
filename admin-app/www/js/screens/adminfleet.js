@@ -1,5 +1,16 @@
 "use strict";
-/* SCREEN · Admin Fleet Management */
+/* SCREEN · Admin Fleet Management
+ *
+ * The "camera" button on each card (`data-act="fltedit"`) opens a hidden
+ * file picker (rendered once at the bottom of the screen). The chosen
+ * file is uploaded to /admin/fleet/:id/photo, the row's photo_url is
+ * updated server-side, and the SSE bus fires an 'asset' event so any
+ * connected user panel refreshes the photo immediately.
+ *
+ * While a photo upload is in flight (`app.s.photoBusyAssetId` matches
+ * the card's id) the card swaps its action button for a spinner so the
+ * admin has visible feedback.
+ */
 
 function viewAdminFleet(app){
   const fleet=app.s.admin.fleet;
@@ -11,12 +22,33 @@ function viewAdminFleet(app){
     return {dot:C.faint,label:s.toUpperCase(),col:C.faint};
   }
 
+  /* Per-card photo thumbnail. Uses the same `bgImg` cinematic layering
+   * the user app uses on the home/garage rows so the look stays
+   * consistent. When there's no photo yet we fall back to a dark
+   * gradient with a "no photo" hint so the admin can tell at a glance
+   * which bikes still need a real picture. */
+  function photoThumb(asset){
+    const url=asset.photo_url;
+    const has=!!(url&&String(url).trim());
+    const isBusy=String(app.s.photoBusyAssetId||'')===String(asset.id);
+    const styleBg=has?bgImg(url,'linear-gradient(160deg,#2a1e14,#17110D)'):'linear-gradient(160deg,#1c1610,#0f0b08)';
+    return `<div style="position:relative;flex-shrink:0;width:84px;height:64px;border:1px solid ${C.line};background:${styleBg};background-size:cover;background-position:center;overflow:hidden">
+      ${!has?`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-family:${F.m};font-size:7.5px;letter-spacing:.18em;color:${C.faint}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        NO PHOTO
+      </div>`:''}
+      ${isBusy?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(23,17,13,.7);backdrop-filter:blur(2px)">
+        <span style="display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
+      </div>`:''}
+    </div>`;
+  }
+
   return `<div style="padding-bottom:120px;background:${C.base}">
     ${topbar('FLEET MANAGEMENT',`<div class="press" data-act="reload" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${C.dim}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>`)}
 
     <div style="padding:18px 24px 8px">
       ${eyebrow('// ALL BIKES',C.amber)}
-      <div style="font-family:${F.g};font-size:12px;color:${C.faint};margin-top:4px">Toggle availability · edit pricing</div>
+      <div style="font-family:${F.g};font-size:12px;color:${C.faint};margin-top:4px">Toggle availability · change photo</div>
     </div>
 
     ${!fleet?`<div style="padding:60px 24px;text-align:center;font-family:${F.m};font-size:11px;letter-spacing:.18em;color:${C.faint}">LOADING FLEET…</div>`:
@@ -25,8 +57,10 @@ function viewAdminFleet(app){
       ${fleet.map(a=>{
         const sb=statusBadge(a.status);
         const specs=a.specs||{};
+        const busy=String(app.s.photoBusyAssetId||'')===String(a.id);
         return `<div style="background:${C.surf};border:1px solid ${C.line};padding:16px">
           <div style="display:flex;align-items:flex-start;gap:14px">
+            ${photoThumb(a)}
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                 <div style="width:8px;height:8px;border-radius:50%;background:${sb.dot}"></div>
@@ -45,14 +79,19 @@ function viewAdminFleet(app){
             </div>
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
-            ${a.status==='available'?
+            ${busy
+              ?`<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;background:${C.well};border:1px solid ${C.line};font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.dim}">
+                <span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
+                UPLOADING PHOTO…
+              </div>`
+              :a.status==='available'?
               `<div class="press" data-act="flttoggle" data-id="${a.id}" data-to="maintenance" style="flex:1;text-align:center;padding:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.red}">SET OFFLINE</div>`:
               a.status==='maintenance'?
               `<div class="press" data-act="flttoggle" data-id="${a.id}" data-to="available" style="flex:1;text-align:center;padding:10px;background:rgba(46,160,67,.1);border:1px solid rgba(46,160,67,.3);font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.green}">SET AVAILABLE</div>`:
               `<div style="flex:1;text-align:center;padding:10px;background:${C.well};border:1px solid ${C.line};font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.faint}">${a.status.toUpperCase()}</div>`
             }
-            <div class="press" data-act="fltedit" data-id="${a.id}" style="width:44px;display:flex;align-items:center;justify-content:center;background:${C.well};border:1px solid ${C.line}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <div class="press" data-act="fltedit" data-id="${a.id}" title="Change photo" style="width:44px;display:flex;align-items:center;justify-content:center;background:${C.well};border:1px solid ${C.line};${busy?'opacity:.5;pointer-events:none':''}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
             </div>
           </div>
         </div>`;
@@ -60,5 +99,10 @@ function viewAdminFleet(app){
     </div>`}
 
     ${bottomBtn('+ ADD NEW BIKE','adminaddbike')}
+
+    <!-- Hidden file input reused for every card's "Change photo" action.
+         The asset id is stashed on the input by openCardPhotoPicker()
+         and read back in onCardPhotoChange(). -->
+    <input id="cardPhotoFileIn" type="file" accept="image/*" style="display:none" />
   </div>`;
 }

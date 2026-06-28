@@ -4,6 +4,13 @@
    Now wired to the real backend: OTP auth, gatekeeper, custom KYC
    (MinIO upload), and DB-backed bookings. Screen markup lives in
    js/screens/*.js. API in js/api.js.
+
+   Real-time fleet sync: after login we open an SSE stream at
+   /context/assets/stream. When the admin panel toggles a bike to
+   'maintenance' (offline) the stream pushes an 'asset' event and we
+   patch the local BIKES array + re-render — no manual refresh. If
+   SSE is unavailable (older WebView, blocked proxy) we fall back to
+   polling /context/assets/version every 5 s.
    ============================================================ */
 
 const VIEWS={
@@ -38,6 +45,13 @@ class Ashva{
       admin:{stats:null,fleet:null,bookings:null,users:null,kyc:null,addBike:{},photoFile:null,photoPreview:null}
     };
     this.timers=[];
+    /* Real-time sync state. `_stream` is the live EventSource wrapper;
+       `_sseFails` counts consecutive open/error cycles so we can decide
+       when to abandon SSE and start the polling fallback. */
+    this._stream=null;
+    this._sseFails=0;
+    this._pollTimer=null;
+    this._lastVersion=-1;
     this.app=$('#app');this.nav=$('#nav');
     this.app.addEventListener('click',e=>this.onClick(e));
     this.app.addEventListener('input',e=>this.onInput(e));
@@ -55,6 +69,7 @@ class Ashva{
       if(step)this.s.gk.step=step;
       this.loadAssets();
       this.refreshMe();
+      this.startAssetStream();
     }else{
       const h=(typeof location!=='undefined'&&location.hash||'').slice(1);
       if(h&&VIEWS[h])this.s.screen=h;
@@ -152,7 +167,22 @@ class Ashva{
       case 'route':this.go('route',{routeId:d.id});break;
       case 'herobar':setHero(this,+d.i,true);break;
       case 'fav':this.toggleFav(d.id);break;
-      case 'configure':this.s.bk.bikeId=d.id;this.s.bk.gear=new Set();this.s.bk.verified=false;this.go('booking');break;
+      case 'configure':{
+        /* Safety net: if the user somehow taps the configure action for a bike
+           that was just set offline (e.g. via deep link, stale screen, or a
+           future code path that doesn't yet check `isUnavailable`), block
+           the navigation and bounce them back to the detail screen. The
+           detail CTA itself is already disabled for offline bikes, so this
+           only fires in edge cases. */
+        const cb=bike(d.id);
+        if(cb&&(cb.status==='maintenance'||cb.status==='offline'||cb.status==='retired')){
+          this.flash('This machine is currently offline',C.red);
+          this.go('detail',{bikeId:d.id});
+          break;
+        }
+        this.s.bk.bikeId=d.id;this.s.bk.gear=new Set();this.s.bk.verified=false;this.go('booking');
+        break;
+      }
       case 'hub':this.s.bk.hub=d.h;this.render();break;
       case 'date':this.s.bk.date=+d.d;this.render();break;
       case 'dur':this.s.bk.days=Math.max(1,Math.min(30,this.s.bk.days+ +d.v));this.render();break;
@@ -206,9 +236,216 @@ class Ashva{
     if(sc==='admin'){this.s.admin.stats=null;this.loadAdminStats();return;}
     this.loadAssets();this.refreshMe();this.flash('Refreshed',C.green);
   }
-  loadAssets(){this._assetsTs=Date.now();API.assets().then(r=>{if(!r.ok)return;const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;const b=BIKES.find(b=>b.id===a.slug||(a.name&&b.name.toLowerCase()===a.name.toLowerCase()));if(b){b.price=a.pricePerDay||b.price;b.status=a.status;if(a.photoUrl)b.photo=a.photoUrl;if(a.specs?.about)b.about=a.specs.about;if(Array.isArray(a.specs?.features)&&a.specs.features.length)b.features=a.specs.features;}else if(a.status!=='retired'){const sp=a.specs||{};const feats=Array.isArray(sp.features)?sp.features:(sp.features?sp.features.split(',').map(s=>s.trim()).filter(Boolean):[]);BIKES.push({id:a.slug||a.id,name:a.name,maker:a.maker||'',price:a.pricePerDay,status:a.status,photo:a.photoUrl||'',grad:'linear-gradient(160deg,#2a1e14,#17110D)',kicker:sp.kicker||'',engine:sp.engine||'',power:sp.power||'',range:sp.range||'',torque:sp.torque||'',top:sp.topSpeed||'',weight:sp.weight||'',tag:sp.tagline||'',about:sp.about||'',features:feats,routeScore:{leh:5,spiti:5,konkan:5,rann:5},rating:4.5,rides:0});}});this.s.assetMap=m;this.render();});}
+
+  /* Normalize the spec-features field — the server may return it as an
+   * array (new code), a comma-separated string (legacy), or null
+   * (mid-edit). Always end up with a clean string[]. */
+  pickFeats(sp){
+    if(!sp)return [];
+    if(Array.isArray(sp.features))return sp.features.filter(f=>f!=null&&String(f).trim()!=='');
+    if(typeof sp.features==='string'&&sp.features.trim()){
+      return sp.features.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  /* Pull the live asset list from the server and merge it with the
+   * static BIKES catalogue.
+   *
+   * Two important rules (so static-bike photos don't get clobbered and
+   * admin-added bikes render correctly):
+   *  1. EXISTING BIKES (matched by slug or name) — truthy-only assign.
+   *     Static bikes don't exist in the DB, so the API returns null for
+   *     their photo/specs; we must NOT clobber the static values with
+   *     `null`/`''`. Admin updates, on the other hand, come through
+   *     with a real URL/string and DO override.
+   *  2. NEW BIKES (no match in BIKES) — always assign every field with
+   *     an explicit value (empty string when missing). This is a brand
+   *     new record, so there's nothing to fall back to, and the detail
+   *     screen's placeholders can take over cleanly. */
+  loadAssets(){
+    this._assetsTs=Date.now();
+    API.assets().then(r=>{
+      if(!r.ok)return;
+      const m={};
+      r.data.assets.forEach(a=>{
+        if(a.slug)m[a.slug]=a.id;
+        const sp=a.specs||{};
+        const feats=this.pickFeats(sp);
+        const b=BIKES.find(b=>b.id===a.slug||(a.name&&b.name.toLowerCase()===a.name.toLowerCase()));
+        if(b){
+          // EXISTING BIKE — truthy-only assign so static fallback is preserved.
+          if(a.pricePerDay!=null)b.price=a.pricePerDay;
+          if(a.status)b.status=a.status;
+          if(a.rating!=null)b.rating=a.rating;
+          if(a.photoUrl)b.photo=a.photoUrl;
+          if(sp.kicker)b.kicker=sp.kicker;
+          if(sp.engine)b.engine=sp.engine;
+          if(sp.power)b.power=sp.power;
+          if(sp.range)b.range=sp.range;
+          if(sp.torque)b.torque=sp.torque;
+          if(sp.topSpeed)b.top=sp.topSpeed;
+          if(sp.weight)b.weight=sp.weight;
+          if(sp.tagline)b.tag=sp.tagline;
+          if(sp.about)b.about=sp.about;
+          if(feats.length)b.features=feats;
+        }else if(a.status!=='retired'){
+          // NEW BIKE — always assign with explicit empty values for missing fields.
+          BIKES.push({
+            id:a.slug||a.id,
+            name:a.name,
+            maker:a.maker||'',
+            price:a.pricePerDay,
+            status:a.status,
+            photo:a.photoUrl||'',
+            grad:'linear-gradient(160deg,#2a1e14,#17110D)',
+            kicker:sp.kicker||'',
+            engine:sp.engine||'',
+            power:sp.power||'',
+            range:sp.range||'',
+            torque:sp.torque||'',
+            top:sp.topSpeed||'',
+            weight:sp.weight||'',
+            tag:sp.tagline||'',
+            about:sp.about||'',
+            features:feats,
+            routeScore:{leh:5,spiti:5,konkan:5,rann:5},
+            rating:4.5,rides:0,
+          });
+        }
+      });
+      this.s.assetMap=m;
+      this.render();
+    });
+  }
+
+  /* Real-time fleet sync. Patch a single asset received from the SSE
+   * stream (or polling fallback) into the local BIKES array. Same rules
+   * as loadAssets(): truthy-only for existing bikes, explicit-empty for
+   * new ones. */
+  applyAssetUpdate(a){
+    if(!a)return;
+    const id=a.id, slug=a.slug;
+    const sp=a.specs||{};
+    const feats=this.pickFeats(sp);
+    let bike=BIKES.find(b=>b.id===slug||b.id===id);
+    if(bike){
+      if(a.status)bike.status=a.status;
+      if(a.pricePerDay!=null)bike.price=a.pricePerDay;
+      if(a.rating!=null)bike.rating=a.rating;
+      if(a.photoUrl)bike.photo=a.photoUrl;
+      if(sp.kicker)bike.kicker=sp.kicker;
+      if(sp.engine)bike.engine=sp.engine;
+      if(sp.power)bike.power=sp.power;
+      if(sp.range)bike.range=sp.range;
+      if(sp.torque)bike.torque=sp.torque;
+      if(sp.topSpeed)bike.top=sp.topSpeed;
+      if(sp.weight)bike.weight=sp.weight;
+      if(sp.tagline)bike.tag=sp.tagline;
+      if(sp.about)bike.about=sp.about;
+      if(feats.length)bike.features=feats;
+    }else if(a.status!=='retired'){
+      BIKES.push({
+        id:slug||id,
+        name:a.name||'New bike',
+        maker:a.maker||'',
+        price:a.pricePerDay||0,
+        status:a.status,
+        photo:a.photoUrl||'',
+        grad:'linear-gradient(160deg,#2a1e14,#17110D)',
+        kicker:sp.kicker||'',
+        engine:sp.engine||'',
+        power:sp.power||'',
+        range:sp.range||'',
+        torque:sp.torque||'',
+        top:sp.topSpeed||'',
+        weight:sp.weight||'',
+        tag:sp.tagline||'',
+        about:sp.about||'',
+        features:feats,
+        routeScore:{leh:5,spiti:5,konkan:5,rann:5},
+        rating:a.rating||4.5,rides:0,
+      });
+    }
+    if(slug){
+      this.s.assetMap=this.s.assetMap||{};
+      this.s.assetMap[slug]=id;
+    }
+    this.render();
+  }
+
+  /** Try the SSE stream. After 3 consecutive error/open-failures we
+   *  permanently switch this session to polling until the user signs
+   *  out. The connection is auto-reconnected by the browser, but only
+   *  while we count it as healthy. */
+  startAssetStream(){
+    this.stopVersionPolling();
+    if(this._stream)return;
+    const r=API.assetsStream();
+    if(!r||!r.ok){
+      // Older WebView, no EventSource, or no token — go straight to polling.
+      this._sseFails=99;
+      this.startVersionPolling();
+      return;
+    }
+    const evt=r.evt;
+    this._stream=r;
+    evt.addEventListener('open',()=>{this._sseFails=0;});
+    evt.addEventListener('hello',(e)=>{
+      // Sync our polling baseline to the server's current version so a
+      // quick stream-reconnect doesn't trigger a redundant loadAssets().
+      try{const d=JSON.parse(e.data);if(d&&typeof d.version==='number')this._lastVersion=d.version;}catch{}
+    });
+    evt.addEventListener('asset',(e)=>{
+      try{
+        const msg=JSON.parse(e.data);
+        const a=msg&&msg.asset;
+        if(a)this.applyAssetUpdate(a);
+      }catch{}
+    });
+    // EventSource auto-reconnects; count open-failures so we can
+    // escalate to polling after enough flakes.
+    evt.addEventListener('error',()=>{
+      this._sseFails+=1;
+      if(this._sseFails>=3){
+        if(this._stream)this._stream.close();
+        this._stream=null;
+        this.startVersionPolling();
+      }
+    });
+  }
+
+  stopAssetStream(){
+    if(this._stream){try{this._stream.close();}catch{}this._stream=null;}
+  }
+
+  /** Cheap polling fallback — fetch the version counter every 5 s and
+   *  pull the full asset list only when the counter bumps. */
+  startVersionPolling(){
+    this.stopVersionPolling();
+    if(this._pollTimer)return;
+    const tick=()=>{
+      API.assetsVersion().then(r=>{
+        if(!r.ok)return;
+        const v=r.data&&r.data.version;
+        if(typeof v!=='number')return;
+        if(this._lastVersion!==-1&&v!==this._lastVersion){
+          this.loadAssets();
+        }
+        this._lastVersion=v;
+      }).catch(()=>{});
+    };
+    tick();
+    this._pollTimer=setInterval(tick,5000);
+    this.timers.push(this._pollTimer);
+  }
+  stopVersionPolling(){
+    if(this._pollTimer){clearInterval(this._pollTimer);this._pollTimer=null;}
+  }
+
   afterLogin(skipGate){
     this.loadAssets();
+    this.startAssetStream();
     const step=gateStep(this.s.user);
     this.s.stack=[];
     if(skipGate){try{localStorage.setItem('ashva.gkskip','1');}catch{}}
@@ -220,6 +457,10 @@ class Ashva{
   signOut(){
     API.setSession(null);
     try{localStorage.removeItem('ashva.gkskip');}catch{}
+    this.stopAssetStream();
+    this.stopVersionPolling();
+    this._sseFails=0;
+    this._lastVersion=-1;
     this.s.user=null;this.s.confirmed=null;this.s.assetMap={};
     this.s.stack=[];this.s.auth={mode:'email',val:'',step:'enter',otp:'',channel:null,dest:'',challengeId:null,busy:false};
     this.s.screen='auth';this.render();
@@ -303,7 +544,7 @@ class Ashva{
     });
     gis.prompt(n=>{
       if(n.isNotDisplayed()||n.isSkippedMoment()){
-        this.flash('Pop-up blocked · allow pop-ups, or use email/phone',C.amber);
+        this.flash('Pop-up blocked · allow pop-ups, or use email or phone',C.amber);
       }
     });
   }
@@ -488,13 +729,28 @@ class Ashva{
   /* --- misc --- */
   toggleFav(id){if(this.s.fav.has(id))this.s.fav.delete(id);else this.s.fav.add(id);this.render();}
   toggleGear(id){const g=this.s.bk.gear;if(g.has(id))g.delete(id);else g.add(id);this.render();}
+
+  /* Toast / flash banner. Auto-clears exactly 3000 ms after the banner
+     appears, regardless of CSS animation state. Both timers are pushed
+     into `app.timers` so the existing `clearTimers()` cleanup in
+     `render()` cancels them on screen change — no leaks even if the
+     user navigates away mid-banner. */
   flash(msg,col){
     const old=$('#flash');if(old)old.remove();
     const el=document.createElement('div');el.id='flash';
     el.style.cssText=`position:absolute;top:64px;left:24px;right:24px;z-index:80;padding:14px 18px;background:${C.surf};border:1px solid ${col};color:${col};font-family:${F.m};font-size:11px;letter-spacing:.08em;text-align:center;animation:rise .3s ease`;
     el.textContent=msg;$('#device').appendChild(el);
-    const out=setTimeout(()=>{el.style.animation='toast-out .26s ease forwards';setTimeout(()=>{if(el.parentNode)el.remove();},240);},1900);
-    this.timers.push(out);
+
+    /* Two-timer pattern:
+       - `out` triggers the CSS slide-out animation 260 ms before the
+         hard-remove so the user actually sees the toast leave.
+       - `kill` is the hard guarantee: exactly 3000 ms after the banner
+         appeared, it is removed from the DOM. If the user navigates
+         away before then, render()'s clearTimers() will cancel both
+         timers and the element will be removed by the next render. */
+    const out=setTimeout(()=>{el.style.animation='toast-out .26s ease forwards';},2740);
+    const kill=setTimeout(()=>{if(el.parentNode)el.remove();},3000);
+    this.timers.push(out,kill);
   }
 }
 

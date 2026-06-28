@@ -56,6 +56,11 @@ window.API = (function () {
     adminFleet: (tok) => req('/admin/fleet', { token: tok }),
     adminToggle: (tok, id, status) => req('/admin/fleet/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminAddBike: (tok, data) => req('/admin/fleet', { method: 'POST', body: data, token: tok }),
+    /* One-shot photo replace. PATCH (not POST) so the URL is naturally
+     * scoped to /admin/fleet/:id. Multipart upload in a single round-trip;
+     * the server uploads to MinIO, writes photo_url, and emits the SSE
+     * asset event so user panels refresh in real time. */
+    adminSetPhoto: (tok, id, formData) => req('/admin/fleet/'+id+'/photo', { method: 'PATCH', form: formData, token: tok }),
     adminBookings: (tok) => req('/admin/bookings', { token: tok }),
     adminBookingStatus: (tok, id, status) => req('/admin/bookings/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminUsers: (tok) => req('/admin/users', { token: tok }),

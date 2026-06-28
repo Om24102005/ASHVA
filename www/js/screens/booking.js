@@ -3,6 +3,17 @@
 
 function viewBooking(app){
   const bk=app.s.bk;const b=bike(bk.bikeId);
+  /* Defense in depth: if the booking screen is reached for a bike that
+     has just been set offline (deep link, back stack, race with the SSE
+     event), bounce the user to the detail screen instead of letting
+     them walk through the full flow and only fail at the payment step.
+     The detail CTA itself is already disabled for offline bikes — this
+     only fires in edge cases. */
+  if(b&&(b.status==='maintenance'||b.status==='offline'||b.status==='retired')){
+    app.flash('This machine is currently offline',C.red);
+    app.go('detail',{bikeId:bk.bikeId});
+    return '<div></div>';
+  }
   const today=new Date().toISOString().slice(0,10);
   const endD=dateAddDays(bk.date,bk.days);
   const bikeTotal=b.price*bk.days;

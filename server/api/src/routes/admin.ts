@@ -1,4 +1,7 @@
-/** Admin routes — fleet management, bookings, users, KYC. Admin-JWT gated. */
+/** Admin routes — fleet management, bookings, users, KYC. Admin-JWT gated.
+ *  Every mutation that affects a bike also emits an 'asset' event on the
+ *  in-process bus (see ../bus.ts) so subscribed user panels see the change
+ *  instantly without a refresh. */
 import crypto from 'crypto';
 import multer from 'multer';
 import { Router } from 'express';
@@ -8,6 +11,7 @@ import { asyncHandler, unauthorized, bad, notFound } from '../http.js';
 import { signToken, verifyToken } from '../auth/jwt.js';
 import { uploadObject } from '../providers/storage.js';
 import { env } from '../env.js';
+import { emit } from '../bus.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const uploadMW = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -24,6 +28,23 @@ function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
   }
   req.auth = claims;
   next();
+}
+
+/** Map a raw `assets` row to the public payload shape used by both /admin/fleet
+ *  and /context/assets so user panels and admins always see the same fields. */
+function assetSnapshot(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: row['id'],
+    slug: row['slug'],
+    name: row['name'],
+    maker: row['maker'],
+    type: row['type'],
+    status: row['status'],
+    pricePerDay: row['price_per_day'] != null ? Number(row['price_per_day']) : null,
+    rating: row['rating'] != null ? Number(row['rating']) : null,
+    specs: row['specs'] ?? {},
+    photoUrl: row['photo_url'] ?? null,
+  };
 }
 
 /* ── auth ─────────────────────────────────────────────────── */
@@ -103,6 +124,32 @@ adminRouter.post(
   }),
 );
 
+/* One-shot photo replace: upload a file, set it as the bike's photo_url,
+ * and emit the SSE update so user panels refresh in real time. This is the
+ * primary endpoint the admin fleet UI uses (one round-trip instead of
+ * upload-then-PATCH). */
+adminRouter.patch(
+  '/fleet/:id/photo',
+  requireAdmin,
+  uploadMW.single('photo'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw bad('No photo file.');
+    const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const key = `bikes/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    const url = await uploadObject(key, req.file.buffer, req.file.mimetype);
+
+    const { rows } = await query(
+      `UPDATE assets SET photo_url = $1 WHERE id = $2 AND status != 'retired' RETURNING *`,
+      [url, req.params['id']],
+    );
+    if (!rows[0]) throw notFound('Asset not found.');
+
+    emit('asset', { kind: 'update', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+
+    res.json({ ok: true, data: { url, asset: assetSnapshot(rows[0] as Record<string, unknown>) } });
+  }),
+);
+
 adminRouter.patch(
   '/fleet/:id',
   requireAdmin,
@@ -113,6 +160,9 @@ adminRouter.patch(
         name: z.string().min(1).optional(),
         pricePerDay: z.number().min(0).optional(),
         rating: z.number().min(0).max(5).optional(),
+        // Allow updating just the photo URL without re-uploading. Useful
+        // when the admin wants to paste a CDN URL or clear the photo.
+        photoUrl: z.string().optional(),
       })
       .parse(req.body);
 
@@ -124,6 +174,7 @@ adminRouter.patch(
     if (body.name !== undefined) push('name', body.name);
     if (body.pricePerDay !== undefined) push('price_per_day', body.pricePerDay);
     if (body.rating !== undefined) push('rating', body.rating);
+    if (body.photoUrl !== undefined) push('photo_url', body.photoUrl || null);
     if (!fields.length) throw bad('Nothing to update.');
 
     vals.push(req.params['id']);
@@ -132,6 +183,10 @@ adminRouter.patch(
       vals,
     );
     if (!rows[0]) throw notFound('Asset not found.');
+
+    // Real-time push to every subscribed user panel.
+    emit('asset', { kind: 'update', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+
     res.json({ asset: rows[0] });
   }),
 );
@@ -178,6 +233,9 @@ adminRouter.post(
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [slug, b.name, b.maker, b.type, b.pricePerDay, JSON.stringify(specs), b.photoUrl || null],
     );
+
+    emit('asset', { kind: 'create', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+
     res.json({ asset: rows[0] });
   }),
 );
@@ -216,7 +274,14 @@ adminRouter.patch(
     );
     if (!rows[0]) throw notFound('Booking not found.');
     if (['completed', 'cancelled'].includes(status)) {
-      await query(`UPDATE assets SET status = 'available' WHERE id = $1 AND status = 'booked'`, [rows[0].asset_id]);
+      // Returning the bike to the pool — push the new status to user panels.
+      const upd = await query(
+        `UPDATE assets SET status = 'available' WHERE id = $1 AND status = 'booked' RETURNING *`,
+        [rows[0].asset_id],
+      );
+      if (upd.rows[0]) {
+        emit('asset', { kind: 'update', asset: assetSnapshot(upd.rows[0] as Record<string, unknown>) });
+      }
     }
     res.json({ booking: rows[0] });
   }),

@@ -21,6 +21,11 @@ class AdminApp {
         photoFile: null,
         photoPreview: null,
       },
+      // Transient state for the per-bike photo-replace flow. We keep
+      // `photoBusyAssetId` so the fleet card can show a spinner on the
+      // bike currently being updated and a disabled state on the rest
+      // of the UI.
+      photoBusyAssetId: null,
     };
     this._prev = null;
     this._flashTimer = null;
@@ -51,15 +56,20 @@ class AdminApp {
     const fn = views[this.s.screen];
     if (!fn) return;
     el.innerHTML = fn(this);
-    // wire file input after render
+    // wire file inputs after render
     this.mount();
   }
 
   mount() {
-    // wire photo file input
+    // wire photo file inputs (one for the add-bike form, one for the
+    // hidden per-card photo picker triggered by the edit button)
     const photoIn = document.getElementById('photoFileIn');
     if (photoIn) {
       photoIn.addEventListener('change', e => this.onPhotoChange(e));
+    }
+    const cardPhotoIn = document.getElementById('cardPhotoFileIn');
+    if (cardPhotoIn) {
+      cardPhotoIn.addEventListener('change', e => this.onCardPhotoChange(e));
     }
 
     // load data for screens that need it
@@ -109,6 +119,20 @@ class AdminApp {
     reader.readAsDataURL(file);
   }
 
+  /* The hidden <input type="file"> triggered by the per-card "Change
+   * photo" button. The chosen asset id is stored on the input as a
+   * data-asset-id so we can match it back to a row in this.s.admin.fleet
+   * without juggling closures. */
+  onCardPhotoChange(e) {
+    const inp = e.target;
+    const file = inp.files && inp.files[0];
+    const id = inp.dataset && inp.dataset.assetId;
+    // reset the input so re-selecting the same file fires `change` again
+    try { inp.value = ''; } catch { /* IE/old webviews */ }
+    if (!file || !id) return;
+    this.setBikePhoto(id, file);
+  }
+
   flash(msg, col) {
     if (this._flashTimer) clearTimeout(this._flashTimer);
     this.s.flash = { msg, col: col || C.sun };
@@ -136,6 +160,10 @@ class AdminApp {
     if (act === 'adminaddbike') { this.s.admin.addBike = {}; this.s.admin.photoFile = null; this.s.admin.photoPreview = null; this.go('adminaddbike'); return; }
 
     if (act === 'flttoggle') { this.toggleAsset(el.dataset.id, el.dataset.to); return; }
+    /* "Change photo" button on a fleet card. We don't read the file
+     * here — we open the system file picker via a hidden <input> rendered
+     * by the screen, then handle the selection in onCardPhotoChange. */
+    if (act === 'fltedit') { this.openCardPhotoPicker(el.dataset.id); return; }
     if (act === 'submitaddbike') { this.addBike(); return; }
     if (act === 'bkstatus') { this.bookingStatus(el.dataset.id, el.dataset.s); return; }
     if (act === 'usrstatus') { this.userStatus(el.dataset.id, el.dataset.s); return; }
@@ -208,6 +236,55 @@ class AdminApp {
     const asset = this.s.admin.fleet && this.s.admin.fleet.find(a => String(a.id) === String(id));
     if (asset) asset.status = status;
     this.flash('Status updated.', C.green);
+  }
+
+  /* Triggers the OS file picker for a specific fleet card. We can't
+   * call <input>.click() from a synchronous handler in all browsers
+   * if the click came from a synthetic event, so we route through a
+   * dedicated hidden <input id="cardPhotoFileIn"> that the screen
+   * renders once. The asset id is stashed on the input as a data attr
+   * by the screen, then onCardPhotoChange reads it back. */
+  openCardPhotoPicker(assetId) {
+    const inp = document.getElementById('cardPhotoFileIn');
+    if (!inp) { this.flash('Photo picker unavailable', C.red); return; }
+    inp.dataset.assetId = assetId;
+    inp.click();
+  }
+
+  /* Uploads `file` to the server for the given asset and patches the
+   * local fleet record on success. While the upload is in flight we
+   * mark `photoBusyAssetId` so the card can show a spinner. The SSE
+   * bus will also fire an 'asset' event the server emits after the
+   * update, but we patch locally first so the admin sees an instant
+   * UI update. */
+  async setBikePhoto(assetId, file) {
+    if (this.s.photoBusyAssetId) { this.flash('Another upload in progress…', C.amber); return; }
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      this.flash('Pick an image file', C.red); return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.flash('Image must be under 10 MB', C.red); return;
+    }
+    this.s.photoBusyAssetId = String(assetId);
+    this.render();
+    const fd = new FormData();
+    fd.append('photo', file);
+    const r = await API.adminSetPhoto(this.s.adminToken, assetId, fd);
+    this.s.photoBusyAssetId = null;
+    if (!r.ok) {
+      this.flash((r.error && r.error.message) || 'Photo upload failed', C.red);
+      this.render();
+      return;
+    }
+    // Patch the local record so the card shows the new image immediately
+    // without waiting for the SSE round-trip. The server has already
+    // emitted the SSE 'asset' event by the time we land here, so any
+    // connected user panel will also see the change.
+    const url = r.data && r.data.url;
+    const asset = this.s.admin.fleet && this.s.admin.fleet.find(a => String(a.id) === String(assetId));
+    if (asset && url) asset.photo_url = url;
+    this.flash('Photo updated', C.green);
+    this.render();
   }
 
   async addBike() {

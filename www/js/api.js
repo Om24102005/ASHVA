@@ -38,6 +38,35 @@ window.API = (function () {
     }
   }
 
+  /* ── real-time stream ─────────────────────────────────────────────
+   *  EventSource cannot send custom headers, so the JWT is passed via the
+   *  `?token=` query param. Returns `{evt, close}` so callers can tear it
+   *  down on sign-out or page navigation. Falls back to a polling-mode
+   *  version-counter when SSE is not available (older WebViews, etc.). */
+  function assetsStream() {
+    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
+      return { ok: false, reason: 'NO_EVENTSOURCE' };
+    }
+    const tok = getToken();
+    if (!tok) return { ok: false, reason: 'NO_TOKEN' };
+    const url = base() + '/context/assets/stream?token=' + encodeURIComponent(tok);
+    let evt;
+    try {
+      evt = new EventSource(url);
+    } catch (e) {
+      return { ok: false, reason: 'CONSTRUCT_FAILED' };
+    }
+    return {
+      ok: true,
+      evt,
+      close() { try { evt.close(); } catch { /* ignore */ } },
+    };
+  }
+
+  function assetsVersion() {
+    return req('/context/assets/version');
+  }
+
   return {
     base, getToken, getSession, setSession,
     startOtp: (channel, destination) => req('/auth/otp/start', { method: 'POST', body: { channel, destination } }),
@@ -49,6 +78,8 @@ window.API = (function () {
     kycGet: () => req('/kyc'),
     kycSubmit: (form) => req('/kyc/submit', { method: 'POST', form }),
     assets: () => req('/context/assets'),
+    assetsStream,
+    assetsVersion,
     bookingCreate: (p) => req('/bookings', { method: 'POST', body: p }),
     bookings: () => req('/bookings'),
     adminAuth: (email, password) => req('/admin/auth', { method: 'POST', body: { email, password }, token: null }),
