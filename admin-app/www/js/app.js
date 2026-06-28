@@ -126,6 +126,7 @@ class AdminApp {
     const act = el.dataset.act;
 
     if (act === 'back') { this.back(); return; }
+    if (act === 'reload') { this.reload(); return; }
     if (act === 'adminlogin') { this.login(); return; }
     if (act === 'adminout') { this.signOut(); return; }
     if (act === 'adminfleet') { this.s.admin.fleet = null; this.go('adminfleet'); return; }
@@ -262,6 +263,15 @@ class AdminApp {
     const u = this.s.admin.users && this.s.admin.users.find(x => String(x.id) === String(id));
     if (u) u.status = status;
     this.flash('User updated.', C.green);
+  }
+
+  reload() {
+    const sc = this.s.screen;
+    if (sc === 'admin') { this.s.admin.stats = null; this.loadStats(); this.flash('Refreshed', C.green); return; }
+    if (sc === 'adminfleet') { this.s.admin.fleet = null; this.loadFleet(); return; }
+    if (sc === 'adminbookings') { this.s.admin.bookings = null; this.loadBookings(); return; }
+    if (sc === 'adminusers') { this.s.admin.users = null; this.loadUsers(); return; }
+    if (sc === 'adminkyc') { this.s.admin.kyc = null; this.loadKyc(); return; }
   }
 
   async kycVerdict(id, verdict) {

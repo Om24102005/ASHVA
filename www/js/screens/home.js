@@ -69,9 +69,10 @@ function viewHome(app){
             <div style="font-family:${F.m};font-size:7.5px;letter-spacing:.32em;color:${C.faint};margin-top:2px">EST · INDIA</div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:7px;padding:7px 12px;background:rgba(23,17,13,.55);border:1px solid ${C.line};backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)">
+        <div class="press" data-act="reload" style="display:flex;align-items:center;gap:7px;padding:7px 12px;background:rgba(23,17,13,.55);border:1px solid ${C.line};backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)">
           <span style="width:7px;height:7px;border-radius:50%;background:${C.green};box-shadow:0 0 8px ${C.green};animation:pulse 1.8s infinite"></span>
           <span style="font-family:${F.m};font-size:10px;letter-spacing:.16em;color:${C.dim}">MANALI · HP</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </div>
       </div>
 

@@ -188,12 +188,24 @@ class Ashva{
       case 'bkstatus':this.adminBookingStatus(d.id,d.s);break;
       case 'usrstatus':this.adminUserStatus(d.id,d.s);break;
       case 'kycverdict':this.adminKycVerdict(d.id,d.v);break;
+      case 'reload':this.reload();break;
     }
   }
 
   /* --- session helpers --- */
   setBtn(sel,html){const b=$(sel);if(b){b.innerHTML=html;b.style.pointerEvents='none';b.style.opacity='.85';}}
   refreshMe(){API.me().then(r=>{if(r.ok&&r.data.user){this.s.user=r.data.user;const sess=API.getSession();if(sess){sess.user=r.data.user;API.setSession(sess);}}});}
+  reload(){
+    const sc=this.s.screen;
+    this._assetsTs=0;
+    if(sc==='home'||sc==='detail'||sc==='booking'){this.loadAssets();this.refreshMe();this.flash('Fleet refreshed',C.green);return;}
+    if(sc==='adminfleet'){this.s.admin.fleet=null;this.loadAdminFleet();return;}
+    if(sc==='adminbookings'){this.s.admin.bookings=null;this.loadAdminBookings();return;}
+    if(sc==='adminusers'){this.s.admin.users=null;this.loadAdminUsers();return;}
+    if(sc==='adminkyc'){this.s.admin.kyc=null;this.loadAdminKyc();return;}
+    if(sc==='admin'){this.s.admin.stats=null;this.loadAdminStats();return;}
+    this.loadAssets();this.refreshMe();this.flash('Refreshed',C.green);
+  }
   loadAssets(){this._assetsTs=Date.now();API.assets().then(r=>{if(!r.ok)return;const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;const b=BIKES.find(b=>b.id===a.slug);if(b){b.price=a.pricePerDay||b.price;b.status=a.status;if(a.photoUrl)b.photo=a.photoUrl;if(a.specs?.about)b.about=a.specs.about;if(Array.isArray(a.specs?.features)&&a.specs.features.length)b.features=a.specs.features;}else if(a.status!=='retired'){const sp=a.specs||{};const feats=Array.isArray(sp.features)?sp.features:(sp.features?sp.features.split(',').map(s=>s.trim()).filter(Boolean):[]);BIKES.push({id:a.slug||a.id,name:a.name,maker:a.maker||'',price:a.pricePerDay,status:a.status,photo:a.photoUrl||'',grad:'linear-gradient(160deg,#2a1e14,#17110D)',kicker:sp.kicker||'',engine:sp.engine||'',power:sp.power||'',range:sp.range||'',torque:sp.torque||'',top:sp.topSpeed||'',weight:sp.weight||'',tag:sp.tagline||'',about:sp.about||'',features:feats,routeScore:{leh:5,spiti:5,konkan:5,rann:5},rating:4.5,rides:0});}});this.s.assetMap=m;this.render();});}
   afterLogin(skipGate){
     this.loadAssets();

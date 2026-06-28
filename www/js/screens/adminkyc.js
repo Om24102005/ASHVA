@@ -5,7 +5,7 @@ function viewAdminKyc(app){
   const list=app.s.admin.kyc;
 
   return `<div style="padding-bottom:40px;background:${C.base}">
-    ${topbar('KYC REVIEW')}
+    ${topbar('KYC REVIEW',`<div class="press" data-act="reload" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${C.dim}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>`)}
 
     <div style="padding:18px 24px 8px">
       ${eyebrow('// IDENTITY VERIFICATION',C.amber)}

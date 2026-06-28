@@ -26,7 +26,10 @@ function viewAdmin(app){
           <div style="font-family:${F.m};font-size:8px;letter-spacing:.22em;color:${C.ember}">ADMIN</div>
         </div>
       </div>
-      <div class="press" data-act="adminout" style="font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.faint};padding:8px 12px;border:1px solid ${C.line}">SIGN OUT</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="press" data-act="reload" style="width:36px;height:36px;border:1px solid ${C.line};display:flex;align-items:center;justify-content:center;background:rgba(244,235,221,.04)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${C.dim}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+        <div class="press" data-act="adminout" style="font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.faint};padding:8px 12px;border:1px solid ${C.line}">SIGN OUT</div>
+      </div>
     </div>
 
     <div style="padding:24px 24px 8px">
