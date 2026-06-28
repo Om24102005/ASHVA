@@ -25,12 +25,11 @@ function viewDetail(app){
         <span style="display:flex;align-items:center;gap:6px;color:${C.green}"><span style="width:7px;height:7px;border-radius:50%;background:${C.green};animation:pulse 1.8s infinite"></span>AVAILABLE</span>
       </div>
       <div class="stg" style="animation-delay:.05s;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:22px 0">
-        ${cell('ENGINE',b.engine)}${cell('POWER',b.power)}${cell('TORQUE',b.torque)}${cell('TOP SPEED',b.top)}${cell('WEIGHT',b.weight)}${cell('RANGE',b.range)}
+        ${cell('ENGINE',b.engine||'—')}${cell('POWER',b.power||'—')}${cell('TORQUE',b.torque||'—')}${cell('TOP SPEED',b.top||'—')}${cell('WEIGHT',b.weight||'—')}${cell('RANGE',b.range||'—')}
       </div>
-      <div class="stg" style="animation-delay:.1s">${eyebrow('// ABOUT THIS MACHINE',C.sun)}
-        <p style="font-family:${F.g};font-size:15px;line-height:1.65;color:${C.dim};margin:12px 0 26px">${b.about}</p></div>
+      ${b.about?`<div class="stg" style="animation-delay:.1s">${eyebrow('// ABOUT THIS MACHINE',C.sun)}<p style="font-family:${F.g};font-size:15px;line-height:1.65;color:${C.dim};margin:12px 0 26px">${b.about}</p></div>`:''}
       <div class="stg" style="animation-delay:.15s">${eyebrow('// EQUIPPED',C.sun)}
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px">${b.features.map(f=>`<span style="padding:9px 14px;background:${C.surf};border:1px solid ${C.line};font-family:${F.m};font-size:10.5px;letter-spacing:.06em;color:${C.dim}">${f}</span>`).join('')}</div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px">${(b.features||[]).map(f=>`<span style="padding:9px 14px;background:${C.surf};border:1px solid ${C.line};font-family:${F.m};font-size:10.5px;letter-spacing:.06em;color:${C.dim}">${f}</span>`).join('')||`<span style="font-family:${F.g};font-size:14px;color:${C.faint}">Details coming soon.</span>`}</div></div>
       <div class="stg" style="animation-delay:.2s">${eyebrow('// INCLUDED FREE',C.sun)}
         <div style="margin:14px 0 10px">${INCLUDED.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid ${C.line2}">${check()}<span style="font-family:${F.g};font-size:14px;color:${C.ink}">${x}</span></div>`).join('')}</div></div>
     </div>

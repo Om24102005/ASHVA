@@ -148,7 +148,12 @@ adminRouter.post(
         engine: z.string().default(''),
         power: z.string().default(''),
         range: z.string().default(''),
+        torque: z.string().default(''),
+        topSpeed: z.string().default(''),
+        weight: z.string().default(''),
         kicker: z.string().default(''),
+        about: z.string().default(''),
+        features: z.array(z.string()).default([]),
         photoUrl: z.string().default(''),
         type: z.enum(['motorcycle', 'scooter', 'gear']).default('motorcycle'),
       })
@@ -163,7 +168,11 @@ adminRouter.post(
       '-' +
       Date.now().toString(36);
 
-    const specs = { kicker: b.kicker, engine: b.engine, power: b.power, range: b.range };
+    const specs = {
+      kicker: b.kicker, engine: b.engine, power: b.power, range: b.range,
+      torque: b.torque, topSpeed: b.topSpeed, weight: b.weight,
+      about: b.about, features: b.features,
+    };
     const { rows } = await query(
       `INSERT INTO assets (slug, name, maker, type, price_per_day, specs, photo_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,

@@ -229,9 +229,12 @@ class AdminApp {
       // ponytail: if upload fails, fall through to URL field or empty — non-blocking
     }
 
+    const feats = (f.features || '').split(',').map(s => s.trim()).filter(Boolean);
     const payload = {
       maker: f.maker, name: f.name, kicker: f.kicker || '',
       engine: f.engine || '', power: f.power || '', range: f.range || '',
+      torque: f.torque || '', topSpeed: f.topSpeed || '', weight: f.weight || '',
+      about: f.about || '', features: feats,
       pricePerDay: Number(f.pricePerDay), photoUrl,
     };
 

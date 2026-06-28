@@ -194,7 +194,7 @@ class Ashva{
   /* --- session helpers --- */
   setBtn(sel,html){const b=$(sel);if(b){b.innerHTML=html;b.style.pointerEvents='none';b.style.opacity='.85';}}
   refreshMe(){API.me().then(r=>{if(r.ok&&r.data.user){this.s.user=r.data.user;const sess=API.getSession();if(sess){sess.user=r.data.user;API.setSession(sess);}}});}
-  loadAssets(){API.assets().then(r=>{if(!r.ok)return;const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;const b=BIKES.find(b=>b.id===a.slug);if(b){b.price=a.pricePerDay||b.price;b.status=a.status;if(a.photoUrl)b.photo=a.photoUrl;}else if(a.status!=='retired'){BIKES.push({id:a.slug||a.id,name:a.name,maker:a.maker||'',price:a.pricePerDay,status:a.status,photo:a.photoUrl||'',grad:'linear-gradient(160deg,#2a1e14,#17110D)',kicker:a.specs?.kicker||'',engine:a.specs?.engine||'',power:a.specs?.power||'',range:a.specs?.range||'',tag:a.specs?.tagline||'',routeScore:{leh:5,spiti:5,konkan:5,rann:5},rating:4.5,rides:0});}});this.s.assetMap=m;this.render();});}
+  loadAssets(){API.assets().then(r=>{if(!r.ok)return;const m={};r.data.assets.forEach(a=>{if(a.slug)m[a.slug]=a.id;const b=BIKES.find(b=>b.id===a.slug);if(b){b.price=a.pricePerDay||b.price;b.status=a.status;if(a.photoUrl)b.photo=a.photoUrl;if(a.specs?.about)b.about=a.specs.about;if(Array.isArray(a.specs?.features)&&a.specs.features.length)b.features=a.specs.features;}else if(a.status!=='retired'){const sp=a.specs||{};const feats=Array.isArray(sp.features)?sp.features:(sp.features?sp.features.split(',').map(s=>s.trim()).filter(Boolean):[]);BIKES.push({id:a.slug||a.id,name:a.name,maker:a.maker||'',price:a.pricePerDay,status:a.status,photo:a.photoUrl||'',grad:'linear-gradient(160deg,#2a1e14,#17110D)',kicker:sp.kicker||'',engine:sp.engine||'',power:sp.power||'',range:sp.range||'',torque:sp.torque||'',top:sp.topSpeed||'',weight:sp.weight||'',tag:sp.tagline||'',about:sp.about||'',features:feats,routeScore:{leh:5,spiti:5,konkan:5,rann:5},rating:4.5,rides:0});}});this.s.assetMap=m;this.render();});}
   afterLogin(skipGate){
     this.loadAssets();
     const step=gateStep(this.s.user);
@@ -425,10 +425,12 @@ class Ashva{
       if(ur.ok){photoUrl=ur.data.url;}
       else{this.flash('Photo upload failed: '+(ur.error&&ur.error.message),C.red);this.render();return;}
     }
+    const feats=(f.features||'').split(',').map(s=>s.trim()).filter(Boolean);
     API.adminAddBike(this.s.adminToken,{
       name:f.name.trim(),maker:f.maker.trim(),pricePerDay:Number(f.pricePerDay),
       engine:f.engine||'',power:f.power||'',range:f.range||'',
-      kicker:f.kicker||'',photoUrl
+      torque:f.torque||'',topSpeed:f.topSpeed||'',weight:f.weight||'',
+      kicker:f.kicker||'',about:f.about||'',features:feats,photoUrl
     }).then(r=>{
       if(r.ok){
         this.s.admin.fleet=null;

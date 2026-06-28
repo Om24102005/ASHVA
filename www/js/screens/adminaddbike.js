@@ -33,7 +33,20 @@ function viewAdminAddBike(app){
       <div style="height:12px"></div>
       ${field('engine','ENGINE','e.g. 452cc')}
       ${field('power','POWER','e.g. 40 bhp')}
+      ${field('torque','TORQUE','e.g. 40 Nm')}
+      ${field('topSpeed','TOP SPEED','e.g. 151 km/h')}
+      ${field('weight','WEIGHT','e.g. 196 kg')}
       ${field('range','RANGE','e.g. 450 km')}
+
+      <div style="height:1px;background:${C.line};margin:8px 0 20px"></div>
+      ${eyebrow('// DESCRIPTION & FEATURES',C.sun)}
+      <div style="height:12px"></div>
+      <div style="margin-bottom:14px">
+        <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint};margin-bottom:6px">ABOUT THIS BIKE</div>
+        <textarea id="ab_about" placeholder="e.g. Built for the high passes, long-travel suspension…" rows="4"
+          style="width:100%;box-sizing:border-box;background:${C.surf};border:1px solid ${C.line};padding:14px 16px;color:${C.ink};font-family:${F.g};font-size:15px;outline:none;-webkit-appearance:none;resize:vertical">${f.about||''}</textarea>
+      </div>
+      ${field('features','FEATURES (comma-separated)','e.g. Switchable ABS, TFT Display, Quickshifter')}
 
       <div style="height:1px;background:${C.line};margin:8px 0 20px"></div>
       ${eyebrow('// PRICING & PHOTO',C.sun)}
