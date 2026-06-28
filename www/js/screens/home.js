@@ -1,8 +1,8 @@
 "use strict";
 /* SCREEN · Home — cinematic staggered hero, parallax, premium garage */
 
-function heroSpec(i){
-  const b=BIKES[i];
+function heroSpec(i,AVAIL){
+  const b=(AVAIL||BIKES.filter(b=>b.status!=='offline'&&b.status!=='retired'))[i]||BIKES[i];
   return `<div style="display:flex;gap:7px;margin-bottom:16px">
     <div style="flex:1;padding:9px 10px;background:rgba(23,17,13,.4);border:1px solid ${C.line};backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
       <div style="font-family:${F.m};font-size:8.5px;letter-spacing:.18em;color:${C.faint};margin-bottom:3px">ENGINE</div>
@@ -19,8 +19,9 @@ function heroSpec(i){
   </div>`;
 }
 
-function heroBlock(i){
-  const b=BIKES[i];
+function heroBlock(i,AVAIL){
+  const _av=AVAIL||BIKES.filter(b=>b.status!=='offline'&&b.status!=='retired');
+  const b=_av[i]||BIKES[i];
   return `<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
     <div style="min-width:0;flex:1">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -36,7 +37,7 @@ function heroBlock(i){
       <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint};margin-top:3px">${stars(b.rating)} · PER DAY</div>
     </div>
   </div>
-  ${heroSpec(i)}
+  ${heroSpec(i,_av)}
   <div class="press" data-act="bike" data-id="${b.id}" style="display:flex;align-items:center;justify-content:center;gap:14px;padding:16px;background:${C.ember};color:#fff;font-family:${F.m};font-size:12px;letter-spacing:.22em;position:relative;overflow:hidden">
     <span>VIEW MACHINE</span>
     <svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M1 5h15M12 1l4 4-4 4"/></svg>
@@ -45,15 +46,17 @@ function heroBlock(i){
 }
 
 function viewHome(app){
-  const b=BIKES[0];
-  const bars=BIKES.map((_,i)=>`<div class="press" data-act="herobar" data-i="${i}" style="flex:1;height:2.5px;background:rgba(244,235,221,.22);overflow:hidden;position:relative">
+  const AVAIL=BIKES.filter(b=>b.status!=='offline'&&b.status!=='retired');
+  if(!AVAIL.length)return `<div style="padding:120px 24px;text-align:center;font-family:${F.m};font-size:11px;letter-spacing:.2em;color:${C.faint}">NO BIKES AVAILABLE</div>`;
+  const b=AVAIL[0];
+  const bars=AVAIL.map((_,i)=>`<div class="press" data-act="herobar" data-i="${i}" style="flex:1;height:2.5px;background:rgba(244,235,221,.22);overflow:hidden;position:relative">
     <div class="hbarfill" data-i="${i}" style="position:absolute;top:0;left:0;height:100%;width:0%;background:linear-gradient(90deg,${C.amber},${C.ember})"></div>
   </div>`).join('');
-  const dots=BIKES.map((_,i)=>`<div class="hdot press" data-act="herobar" data-i="${i}" style="width:${i===0?'18px':'6px'};height:2px;background:${i===0?C.ink:'rgba(244,235,221,.3)'};transition:width .4s cubic-bezier(.16,1,.3,1),background .4s ease"></div>`).join('');
+  const dots=AVAIL.map((_,i)=>`<div class="hdot press" data-act="herobar" data-i="${i}" style="width:${i===0?'18px':'6px'};height:2px;background:${i===0?C.ink:'rgba(244,235,221,.3)'};transition:width .4s cubic-bezier(.16,1,.3,1),background .4s ease"></div>`).join('');
   return `<div style="background:${C.base}">
     <div id="hero" style="position:relative;height:560px;overflow:hidden;touch-action:pan-y;background:${C.base}">
       <div id="hbgA" class="heroimg" style="${bgImg(b.photo,b.grad)};transform:scale(1.06);will-change:transform,opacity"></div>
-      <div id="hbgB" class="heroimg" style="${bgImg(BIKES[1].photo,BIKES[1].grad)};opacity:0;transform:scale(1.06);will-change:transform,opacity;transition:opacity .9s ease"></div>
+      <div id="hbgB" class="heroimg" style="${bgImg((AVAIL[1]||AVAIL[0]).photo,(AVAIL[1]||AVAIL[0]).grad)};opacity:0;transform:scale(1.06);will-change:transform,opacity;transition:opacity .9s ease"></div>
       <div class="sweep"></div>
       <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(23,17,13,.35) 0%,rgba(23,17,13,.12) 18%,transparent 42%,rgba(23,17,13,.45) 70%,rgba(23,17,13,.85) 88%,#17110D 100%)"></div>
       <div style="position:absolute;inset:0;background:radial-gradient(60% 40% at 50% 65%,transparent,rgba(23,17,13,.35) 100%);pointer-events:none"></div>
@@ -79,7 +82,7 @@ function viewHome(app){
       <div style="position:absolute;left:24px;right:24px;bottom:30px;z-index:3">
         <div id="dots" style="display:flex;gap:6px;margin-bottom:14px;align-items:center">${dots}</div>
         <div id="bars" style="display:flex;gap:5px;margin-bottom:18px">${bars}</div>
-        <div id="heroText">${heroBlock(0)}</div>
+        <div id="heroText">${heroBlock(0,AVAIL)}</div>
       </div>
     </div>
 
@@ -132,13 +135,13 @@ function viewHome(app){
           <div style="font-family:${F.m};font-size:9px;letter-spacing:.18em;color:${C.faint}">FLEET STATUS</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
             <span style="width:7px;height:7px;border-radius:50%;background:${C.green};box-shadow:0 0 6px ${C.green}"></span>
-            <span style="font-family:${F.g};font-weight:600;font-size:14px">${BIKES.length} ready</span>
+            <span style="font-family:${F.g};font-weight:600;font-size:14px">${AVAIL.length} ready</span>
           </div>
         </div>
       </div>
     </div>
     <div style="padding:0 24px">
-      ${BIKES.map((b,i)=>`<div class="press" data-act="bike" data-id="${b.id}" style="display:flex;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid ${C.line2};position:relative">
+      ${AVAIL.map((b,i)=>`<div class="press" data-act="bike" data-id="${b.id}" style="display:flex;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid ${C.line2};position:relative">
         <div style="position:absolute;left:-24px;right:-24px;top:0;bottom:0;background:rgba(226,84,42,.04);opacity:0;transition:opacity .25s ease;pointer-events:none" class="garage-row-hover"></div>
         <div style="width:96px;height:72px;flex-shrink:0;overflow:hidden;border:1px solid ${C.line};position:relative;${bgImg(b.photo,b.grad)}">
           <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(23,17,13,.6))"></div>
@@ -168,7 +171,9 @@ function viewHome(app){
 
 /* ---- live behaviour: crossfade slideshow, parallax, progress, swipe ---- */
 function setHero(app,i,user){
-  app.hi=i;const b=BIKES[i];
+  const AVAIL=BIKES.filter(b=>b.status!=='offline'&&b.status!=='retired');
+  if(!AVAIL.length)return;
+  app.hi=i;const b=AVAIL[i];
   const A=$('#hbgA'),B=$('#hbgB');
   if(A&&B){
     const showB=B.style.opacity!=='0'&&B.style.opacity!=='';
@@ -187,7 +192,7 @@ function setHero(app,i,user){
   if(txt){
     txt.style.animation='none';
     txt.offsetHeight;
-    txt.innerHTML=heroBlock(i);
+    txt.innerHTML=heroBlock(i,AVAIL);
     txt.style.animation='rise .55s cubic-bezier(.16,1,.3,1)';
   }
   const dots=document.querySelectorAll('.hdot');
@@ -195,7 +200,7 @@ function setHero(app,i,user){
     d.style.width=k===i?'18px':'6px';
     d.style.background=k===i?C.ink:'rgba(244,235,221,.3)';
   });
-  BIKES.forEach((_,k)=>{const f=document.querySelector('.hbarfill[data-i="'+k+'"]');if(!f)return;
+  AVAIL.forEach((_,k)=>{const f=document.querySelector('.hbarfill[data-i="'+k+'"]');if(!f)return;
     f.style.transition='none';f.style.width='0%';f.offsetHeight;
     if(k<i){f.style.transition='none';f.style.width='100%';}
     else if(k>i){f.style.transition='none';f.style.width='0%';}
@@ -205,7 +210,8 @@ function setHero(app,i,user){
 }
 function startHeroTimer(app){
   if(app.heroIv)clearInterval(app.heroIv);
-  app.heroIv=setInterval(()=>setHero(app,(app.hi+1)%BIKES.length,false),4800);
+  const _avLen=BIKES.filter(b=>b.status!=='offline'&&b.status!=='retired').length||1;
+  app.heroIv=setInterval(()=>setHero(app,(app.hi+1)%_avLen,false),4800);
   app.timers.push(app.heroIv);
 }
 function mountHome(app){
@@ -224,7 +230,7 @@ function mountHome(app){
   /* swipe */
   let sx=0,sy=0,dragging=false;
   hero.addEventListener('pointerdown',e=>{if(e.target.closest('[data-act="herobar"]')||e.target.closest('[data-act="bike"]'))return;sx=e.clientX;sy=e.clientY;dragging=true;});
-  hero.addEventListener('pointerup',e=>{if(!dragging)return;dragging=false;const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)>42&&Math.abs(dx)>Math.abs(dy)){if(dx<0)setHero(app,(app.hi+1)%BIKES.length,true);else setHero(app,(app.hi-1+BIKES.length)%BIKES.length,true);}});
+  hero.addEventListener('pointerup',e=>{if(!dragging)return;dragging=false;const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)>42&&Math.abs(dx)>Math.abs(dy)){if(dx<0)setHero(app,(app.hi+1)%_avLen,true);else setHero(app,(app.hi-1+_avLen+_avLen)%_avLen,true);}});
 
   /* vertical parallax on scroll within hero (subtle) */
   const A=$('#hbgA'),B=$('#hbgB');
