@@ -22,7 +22,9 @@ function viewDetail(app){
     <div style="padding:6px 24px 0">
       <div style="display:flex;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid ${C.line};font-family:${F.m};font-size:11px;letter-spacing:.08em;color:${C.dim}">
         <span>${stars(b.rating)}</span><span style="color:${C.faint}">·</span><span>${b.rides} RIDES</span><span style="color:${C.faint}">·</span>
-        <span style="display:flex;align-items:center;gap:6px;color:${C.green}"><span style="width:7px;height:7px;border-radius:50%;background:${C.green};animation:pulse 1.8s infinite"></span>AVAILABLE</span>
+        ${b.status==='offline'||b.status==='retired'
+          ?`<span style="display:flex;align-items:center;gap:6px;color:${C.red}"><span style="width:7px;height:7px;border-radius:50%;background:${C.red}"></span>NOT AVAILABLE</span>`
+          :`<span style="display:flex;align-items:center;gap:6px;color:${C.green}"><span style="width:7px;height:7px;border-radius:50%;background:${C.green};animation:pulse 1.8s infinite"></span>AVAILABLE</span>`}
       </div>
       <div class="stg" style="animation-delay:.05s;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:22px 0">
         ${cell('ENGINE',b.engine||'—')}${cell('POWER',b.power||'—')}${cell('TORQUE',b.torque||'—')}${cell('TOP SPEED',b.top||'—')}${cell('WEIGHT',b.weight||'—')}${cell('RANGE',b.range||'—')}
@@ -35,7 +37,9 @@ function viewDetail(app){
     </div>
     <div style="position:fixed;bottom:0;left:0;right:0;max-width:390px;margin:0 auto;padding:16px 24px calc(30px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#17110D 30%);display:flex;align-items:center;gap:16px;z-index:35">
       <div><div style="font-family:${F.g};font-weight:700;font-size:24px;color:${C.sun}">${rupee(b.price)}<span style="font-size:12px;color:${C.faint};font-weight:400"> /day</span></div></div>
-      <div class="press" data-act="configure" data-id="${b.id}" style="flex:1;text-align:center;padding:17px;background:${C.ember};color:#fff;font-family:${F.m};font-size:12px;letter-spacing:.16em">CONFIGURE THIS BIKE →</div>
+      ${b.status==='offline'||b.status==='retired'
+        ?`<div style="flex:1;text-align:center;padding:17px;background:${C.surf};border:1px solid ${C.line};color:${C.faint};font-family:${F.m};font-size:12px;letter-spacing:.16em">SOLD OUT</div>`
+        :`<div class="press" data-act="configure" data-id="${b.id}" style="flex:1;text-align:center;padding:17px;background:${C.ember};color:#fff;font-family:${F.m};font-size:12px;letter-spacing:.16em">CONFIGURE THIS BIKE →</div>`}
     </div>
   </div>`;
 }
