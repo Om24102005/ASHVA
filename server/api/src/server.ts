@@ -14,6 +14,7 @@ import { bookingsRouter } from './routes/bookings.js';
 import { contextRouter } from './routes/context.js';
 import { adminRouter } from './routes/admin.js';
 import { streamRouter } from './routes/stream.js';
+import { filesRouter } from './routes/files.js';
 import { ensureBucket } from './providers/storage.js';
 
 async function main(): Promise<void> {
@@ -53,6 +54,10 @@ async function main(): Promise<void> {
   // REST fleet endpoint. Version + SSE both require auth (Bearer header or
   // ?token= for EventSource).
   app.use('/context', streamRouter);
+  // Public photo proxy — see ./routes/files.ts. Mounted at the root so
+  // the URLs it serves (/files/<bucket>/<key>) work from anywhere
+  // regardless of the storage backend's network location.
+  app.use(filesRouter);
 
   app.use(errorMiddleware);
 

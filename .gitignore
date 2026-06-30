@@ -35,3 +35,4 @@ ashva-rn/.env
 ashva-rn/node_modules/
 ashva-rn/.expo/
 ashva-rn/dist/
+.aider*

@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { query } from '../db.js';
 import { asyncHandler, unauthorized, bad, notFound } from '../http.js';
 import { signToken, verifyToken } from '../auth/jwt.js';
-import { uploadObject } from '../providers/storage.js';
+import { uploadObject, publicPhotoUrl } from '../providers/storage.js';
 import { env } from '../env.js';
 import { emit } from '../bus.js';
 import type { Request, Response, NextFunction } from 'express';
@@ -31,8 +31,11 @@ function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
 }
 
 /** Map a raw `assets` row to the public payload shape used by both /admin/fleet
- *  and /context/assets so user panels and admins always see the same fields. */
-function assetSnapshot(row: Record<string, unknown>): Record<string, unknown> {
+ *  and /context/assets so user panels and admins always see the same fields.
+ *  The photoUrl is run through `publicPhotoUrl` so it's always reachable
+ *  from the device that's loading it (LAN IPs get proxied via /files). */
+function assetSnapshot(row: Record<string, unknown>, req?: Request): Record<string, unknown> {
+  const raw = row['photo_url'] ?? null;
   return {
     id: row['id'],
     slug: row['slug'],
@@ -43,7 +46,7 @@ function assetSnapshot(row: Record<string, unknown>): Record<string, unknown> {
     pricePerDay: row['price_per_day'] != null ? Number(row['price_per_day']) : null,
     rating: row['rating'] != null ? Number(row['rating']) : null,
     specs: row['specs'] ?? {},
-    photoUrl: row['photo_url'] ?? null,
+    photoUrl: publicPhotoUrl(typeof raw === 'string' ? raw : null, req),
   };
 }
 
@@ -103,7 +106,7 @@ adminRouter.get(
 adminRouter.get(
   '/fleet',
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const { rows } = await query(
       "SELECT id,slug,name,maker,type,status,price_per_day,rating,specs,photo_url,created_at FROM assets WHERE status != 'retired' ORDER BY created_at ASC",
     );
@@ -119,8 +122,12 @@ adminRouter.post(
     if (!req.file) throw bad('No photo file.');
     const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
     const key = `bikes/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
-    const url = await uploadObject(key, req.file.buffer, req.file.mimetype);
-    res.json({ ok: true, data: { url } });
+    const rawUrl = await uploadObject(key, req.file.buffer, req.file.mimetype);
+    // Return both the raw storage URL and the public (proxied when LAN) URL
+    // so the admin client can preview locally and the user panel can fetch
+    // remotely. The public URL is the one that goes into the asset row.
+    const publicUrl = publicPhotoUrl(rawUrl, req) || rawUrl;
+    res.json({ ok: true, data: { url: publicUrl, rawUrl } });
   }),
 );
 
@@ -136,17 +143,23 @@ adminRouter.patch(
     if (!req.file) throw bad('No photo file.');
     const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
     const key = `bikes/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
-    const url = await uploadObject(key, req.file.buffer, req.file.mimetype);
+    const rawUrl = await uploadObject(key, req.file.buffer, req.file.mimetype);
 
+    // Store the RAW url (the S3 URL) in the DB so the storage provider's
+    // own URL conventions apply consistently. publicPhotoUrl() rewrites
+    // it on the way out via assetSnapshot(), so all consumers (admin
+    // panel, user panel, SSE events) get a network-reachable URL.
     const { rows } = await query(
       `UPDATE assets SET photo_url = $1 WHERE id = $2 AND status != 'retired' RETURNING *`,
-      [url, req.params['id']],
+      [rawUrl, req.params['id']],
     );
     if (!rows[0]) throw notFound('Asset not found.');
 
-    emit('asset', { kind: 'update', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+    const snap = assetSnapshot(rows[0] as Record<string, unknown>, req);
+    emit('asset', { kind: 'update', asset: snap });
 
-    res.json({ ok: true, data: { url, asset: assetSnapshot(rows[0] as Record<string, unknown>) } });
+    const publicUrl = publicPhotoUrl(rawUrl, req) || rawUrl;
+    res.json({ ok: true, data: { url: publicUrl, rawUrl, asset: snap } });
   }),
 );
 
@@ -185,7 +198,7 @@ adminRouter.patch(
     if (!rows[0]) throw notFound('Asset not found.');
 
     // Real-time push to every subscribed user panel.
-    emit('asset', { kind: 'update', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+    emit('asset', { kind: 'update', asset: assetSnapshot(rows[0] as Record<string, unknown>, req) });
 
     res.json({ asset: rows[0] });
   }),
@@ -234,7 +247,7 @@ adminRouter.post(
       [slug, b.name, b.maker, b.type, b.pricePerDay, JSON.stringify(specs), b.photoUrl || null],
     );
 
-    emit('asset', { kind: 'create', asset: assetSnapshot(rows[0] as Record<string, unknown>) });
+    emit('asset', { kind: 'create', asset: assetSnapshot(rows[0] as Record<string, unknown>, req) });
 
     res.json({ asset: rows[0] });
   }),
@@ -280,7 +293,7 @@ adminRouter.patch(
         [rows[0].asset_id],
       );
       if (upd.rows[0]) {
-        emit('asset', { kind: 'update', asset: assetSnapshot(upd.rows[0] as Record<string, unknown>) });
+        emit('asset', { kind: 'update', asset: assetSnapshot(upd.rows[0] as Record<string, unknown>, req) });
       }
     }
     res.json({ booking: rows[0] });

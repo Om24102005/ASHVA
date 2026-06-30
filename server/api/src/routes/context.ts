@@ -3,13 +3,14 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { asyncHandler } from '../http.js';
 import { requireAuth } from '../auth/middleware.js';
+import { publicPhotoUrl } from '../providers/storage.js';
 
 export const contextRouter = Router();
 contextRouter.use(requireAuth);
 
 contextRouter.get(
   '/assets',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const { rows } = await query(`SELECT * FROM assets WHERE status != 'retired' ORDER BY price_per_day ASC`);
     res.json({
       assets: rows.map((r) => ({
@@ -22,7 +23,9 @@ contextRouter.get(
         pricePerDay: Number(r.price_per_day),
         rating: r.rating != null ? Number(r.rating) : null,
         specs: r.specs ?? {},
-        photoUrl: r.photo_url ?? null,
+        // photoUrl is the network-reachable URL — LAN IPs get rewritten
+        // to <apiOrigin>/files/<bucket>/<key> so the user panel always loads.
+        photoUrl: publicPhotoUrl(r.photo_url ?? null, req),
       })),
     });
   }),

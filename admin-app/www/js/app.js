@@ -61,15 +61,11 @@ class AdminApp {
   }
 
   mount() {
-    // wire photo file inputs (one for the add-bike form, one for the
-    // hidden per-card photo picker triggered by the edit button)
+    // Wire the add-bike form's photo input. The per-card photo picker
+    // is created on demand by openCardPhotoPicker() — see below.
     const photoIn = document.getElementById('photoFileIn');
     if (photoIn) {
       photoIn.addEventListener('change', e => this.onPhotoChange(e));
-    }
-    const cardPhotoIn = document.getElementById('cardPhotoFileIn');
-    if (cardPhotoIn) {
-      cardPhotoIn.addEventListener('change', e => this.onCardPhotoChange(e));
     }
 
     // load data for screens that need it
@@ -119,20 +115,6 @@ class AdminApp {
     reader.readAsDataURL(file);
   }
 
-  /* The hidden <input type="file"> triggered by the per-card "Change
-   * photo" button. The chosen asset id is stored on the input as a
-   * data-asset-id so we can match it back to a row in this.s.admin.fleet
-   * without juggling closures. */
-  onCardPhotoChange(e) {
-    const inp = e.target;
-    const file = inp.files && inp.files[0];
-    const id = inp.dataset && inp.dataset.assetId;
-    // reset the input so re-selecting the same file fires `change` again
-    try { inp.value = ''; } catch { /* IE/old webviews */ }
-    if (!file || !id) return;
-    this.setBikePhoto(id, file);
-  }
-
   flash(msg, col) {
     if (this._flashTimer) clearTimeout(this._flashTimer);
     this.s.flash = { msg, col: col || C.sun };
@@ -160,9 +142,12 @@ class AdminApp {
     if (act === 'adminaddbike') { this.s.admin.addBike = {}; this.s.admin.photoFile = null; this.s.admin.photoPreview = null; this.go('adminaddbike'); return; }
 
     if (act === 'flttoggle') { this.toggleAsset(el.dataset.id, el.dataset.to); return; }
-    /* "Change photo" button on a fleet card. We don't read the file
-     * here — we open the system file picker via a hidden <input> rendered
-     * by the screen, then handle the selection in onCardPhotoChange. */
+    /* "Change photo" button on a fleet card. Builds a one-shot file
+     * input on the fly, opens the OS file picker, and self-cleans
+     * once the user picks (or cancels). Building the input fresh
+     * each time avoids the well-known iOS WebView bug where a hidden
+     * <input type="file"> that's been in the DOM across renders stops
+     * firing `change` on the second pick. */
     if (act === 'fltedit') { this.openCardPhotoPicker(el.dataset.id); return; }
     if (act === 'submitaddbike') { this.addBike(); return; }
     if (act === 'bkstatus') { this.bookingStatus(el.dataset.id, el.dataset.s); return; }
@@ -238,17 +223,51 @@ class AdminApp {
     this.flash('Status updated.', C.green);
   }
 
-  /* Triggers the OS file picker for a specific fleet card. We can't
-   * call <input>.click() from a synchronous handler in all browsers
-   * if the click came from a synthetic event, so we route through a
-   * dedicated hidden <input id="cardPhotoFileIn"> that the screen
-   * renders once. The asset id is stashed on the input as a data attr
-   * by the screen, then onCardPhotoChange reads it back. */
+  /* Triggers the OS file picker for a specific fleet card. We build a
+   * fresh <input type="file"> on each click and click it programmatically
+   * on the next microtask. This is more robust than reusing a hidden
+   * input across renders — some iOS WebView builds (and a few Android
+   * ones) stop dispatching `change` on a long-lived hidden file input
+   * after the first pick. Building fresh per click also means we never
+   * need to worry about the input being missing from the DOM (which is
+   * the failure mode behind the "edit button does nothing" bug). */
   openCardPhotoPicker(assetId) {
-    const inp = document.getElementById('cardPhotoFileIn');
-    if (!inp) { this.flash('Photo picker unavailable', C.red); return; }
-    inp.dataset.assetId = assetId;
-    inp.click();
+    if (!assetId) { this.flash('No asset selected', C.red); return; }
+    if (this.s.photoBusyAssetId) { this.flash('Another upload in progress…', C.amber); return; }
+
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    // Some iOS WebViews will refuse to open the picker if the input is
+    // not attached to the DOM. Hidden via opacity:0 + position:fixed
+    // off-screen (rather than display:none) is the widely-recommended
+    // workaround for WKWebView.
+    inp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;';
+    inp.dataset.assetId = String(assetId);
+
+    const self = this;
+    inp.addEventListener('change', function onPick(ev) {
+      inp.removeEventListener('change', onPick);
+      const file = ev.target.files && ev.target.files[0];
+      try { document.body.removeChild(inp); } catch { /* may already be gone */ }
+      if (!file) return; // user cancelled — silent
+      self.setBikePhoto(String(assetId), file);
+    });
+
+    document.body.appendChild(inp);
+
+    // Defer the click to the next microtask so the input is definitely
+    // in the DOM when WKWebView checks, and so the synthetic click
+    // isn't blocked by the same gesture that mounted us.
+    const trigger = () => {
+      try { inp.click(); }
+      catch (err) {
+        try { document.body.removeChild(inp); } catch { /* ignore */ }
+        self.flash('Could not open file picker: ' + (err && err.message || 'unknown'), C.red);
+      }
+    };
+    if (typeof queueMicrotask === 'function') queueMicrotask(trigger);
+    else setTimeout(trigger, 0);
   }
 
   /* Uploads `file` to the server for the given asset and patches the
