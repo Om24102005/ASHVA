@@ -11,14 +11,31 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overscroll-behavior: none; }
-    body {
+    /* html, body, and #app all paint the dark base — html is what shows
+     * during the overscroll rubber-band; body is the default canvas;
+     * #app is the 390px phone-shaped column. Painting all three with
+     * the same dark colour means the screen looks edge-to-edge with no
+     * white peek-through above the status bar or under the home indicator. */
+    html, body {
+      height: 100%;
+      min-height: 100vh;
       background: #17110D;
+      overscroll-behavior: none;
+    }
+    body {
       color: #F4EBDD;
       font-family: 'Space Grotesk', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       overflow-x: hidden;
+      /* Safe-area padding keeps content out from under the iOS status
+       * bar text and the home indicator, while letting the dark
+       * background show through everywhere. `padding-left/right` is
+       * symmetric for the rare case the WebView gets pinched. */
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
     }
     #app {
       max-width: 390px;
@@ -27,6 +44,7 @@
       overflow-y: auto;
       overflow-x: hidden;
       position: relative;
+      background: #17110D;
     }
     input, button, select, textarea { font-family: inherit; border-radius: 0; }
     input:focus { outline: none; }

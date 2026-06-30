@@ -24,8 +24,11 @@ class AdminApp {
       // Transient state for the per-bike photo-replace flow. We keep
       // `photoBusyAssetId` so the fleet card can show a spinner on the
       // bike currently being updated and a disabled state on the rest
-      // of the UI.
+      // of the UI. `photoProgress` is the integer 0-100 reported by the
+      // XHR upload's onprogress event (or null when no upload is in
+      // flight). Screens read both to render a real progress bar.
       photoBusyAssetId: null,
+      photoProgress: null,
     };
     this._prev = null;
     this._flashTimer = null;
@@ -139,7 +142,7 @@ class AdminApp {
     if (act === 'adminbookings') { this.s.admin.bookings = null; this.go('adminbookings'); return; }
     if (act === 'adminusers') { this.s.admin.users = null; this.go('adminusers'); return; }
     if (act === 'adminkyc') { this.s.admin.kyc = null; this.go('adminkyc'); return; }
-    if (act === 'adminaddbike') { this.s.admin.addBike = {}; this.s.admin.photoFile = null; this.s.admin.photoPreview = null; this.go('adminaddbike'); return; }
+    if (act === 'adminaddbike') { this.s.admin.addBike = {}; this.s.admin.photoFile = null; this.s.admin.photoPreview = null; this.s.photoBusyAssetId = null; this.s.photoProgress = null; this.go('adminaddbike'); return; }
 
     if (act === 'flttoggle') { this.toggleAsset(el.dataset.id, el.dataset.to); return; }
     /* "Change photo" button on a fleet card. Builds a one-shot file
@@ -272,24 +275,48 @@ class AdminApp {
 
   /* Uploads `file` to the server for the given asset and patches the
    * local fleet record on success. While the upload is in flight we
-   * mark `photoBusyAssetId` so the card can show a spinner. The SSE
-   * bus will also fire an 'asset' event the server emits after the
-   * update, but we patch locally first so the admin sees an instant
-   * UI update. */
+   * mark `photoBusyAssetId` + `photoProgress` so the card can show a
+   * real "UPLOADING… 47%" progress bar. The XHR-based transport in
+   * API.uploadForm() reports onprogress for every chunk so the user
+   * sees bytes actually flowing, not just a static spinner.
+   *
+   * The SSE bus will also fire an 'asset' event the server emits after
+   * the update, but we patch the local record first so the admin sees
+   * an instant UI update. */
   async setBikePhoto(assetId, file) {
     if (this.s.photoBusyAssetId) { this.flash('Another upload in progress…', C.amber); return; }
     if (!file || !file.type || !file.type.startsWith('image/')) {
       this.flash('Pick an image file', C.red); return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      this.flash('Image must be under 10 MB', C.red); return;
+    // 25 MB ceiling matches the server's multer limit. iPhone ProRAW
+    // and HEIC images can be 12-18 MB so 25 MB gives a comfortable
+    // margin. The error message is from the server's clean 413
+    // response if the user picks something larger.
+    if (file.size > 25 * 1024 * 1024) {
+      this.flash('Image must be under 25 MB', C.red); return;
     }
+
+    const self = this;
     this.s.photoBusyAssetId = String(assetId);
+    this.s.photoProgress = 0;
     this.render();
+
     const fd = new FormData();
     fd.append('photo', file);
-    const r = await API.adminSetPhoto(this.s.adminToken, assetId, fd);
+
+    const r = await API.adminSetPhoto(this.s.adminToken, assetId, fd, function (pct) {
+      // Throttle re-renders to every ~5% so we don't thrash the DOM
+      // with XHR's ~50 ms progress cadence. The final 100% lands
+      // naturally just before the response returns.
+      const prev = self.s.photoProgress || 0;
+      if (pct === 100 || pct - prev >= 5 || pct < prev) {
+        self.s.photoProgress = pct;
+        self.render();
+      }
+    });
+
     this.s.photoBusyAssetId = null;
+    this.s.photoProgress = null;
     if (!r.ok) {
       this.flash((r.error && r.error.message) || 'Photo upload failed', C.red);
       this.render();
@@ -317,13 +344,33 @@ class AdminApp {
 
     // upload photo if file selected
     if (this.s.admin.photoFile) {
+      const self = this;
+      // Mark the add-bike screen as "uploading" so the submit button
+      // can show progress. We reuse `photoBusyAssetId` (sentinel
+      // value "add") and `photoProgress` for the percent.
+      this.s.photoBusyAssetId = 'add';
+      this.s.photoProgress = 0;
+      this.render();
+
       const fd = new FormData();
       fd.append('photo', this.s.admin.photoFile);
-      const up = await API.adminUploadPhoto(this.s.adminToken, fd);
+      const up = await API.adminUploadPhoto(this.s.adminToken, fd, function (pct) {
+        const prev = self.s.photoProgress || 0;
+        if (pct === 100 || pct - prev >= 5 || pct < prev) {
+          self.s.photoProgress = pct;
+          self.render();
+        }
+      });
+      this.s.photoBusyAssetId = null;
+      this.s.photoProgress = null;
       if (up.ok && up.data && up.data.url) {
         photoUrl = up.data.url;
+      } else if (!up.ok) {
+        // Surface the upload error but still let the admin submit
+        // the bike (with a missing photo). The create endpoint
+        // accepts an empty photoUrl.
+        this.flash('Photo upload failed: ' + (up.error && up.error.message || 'unknown') + ' — bike will be added without a photo.', C.amber);
       }
-      // ponytail: if upload fails, fall through to URL field or empty — non-blocking
     }
 
     const feats = (f.features || '').split(',').map(s => s.trim()).filter(Boolean);

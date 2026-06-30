@@ -8,8 +8,10 @@
  * connected user panel refreshes the photo immediately.
  *
  * While a photo upload is in flight (`app.s.photoBusyAssetId` matches
- * the card's id) the card swaps its action button for a spinner so the
- * admin has visible feedback.
+ * the card's id) the action button is replaced with a real progress
+ * bar fed by the XHR's onprogress event. The percentage the user sees
+ * is `app.s.photoProgress` (integer 0-100), throttled to ~5% updates
+ * in `app.setBikePhoto()` to avoid DOM thrash.
  */
 
 function viewAdminFleet(app){
@@ -26,7 +28,9 @@ function viewAdminFleet(app){
    * the user app uses on the home/garage rows so the look stays
    * consistent. When there's no photo yet we fall back to a dark
    * gradient with a "no photo" hint so the admin can tell at a glance
-   * which bikes still need a real picture. */
+   * which bikes still need a real picture. While a photo is uploading
+   * we overlay a backdrop-blurred spinner so the old photo stays
+   * visible underneath (no jarring flash to a blank thumbnail). */
   function photoThumb(asset){
     const url=asset.photo_url;
     const has=!!(url&&String(url).trim());
@@ -37,9 +41,25 @@ function viewAdminFleet(app){
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${C.faint}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
         NO PHOTO
       </div>`:''}
-      ${isBusy?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(23,17,13,.7);backdrop-filter:blur(2px)">
+      ${isBusy?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(23,17,13,.55);backdrop-filter:blur(2px)">
         <span style="display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
       </div>`:''}
+    </div>`;
+  }
+
+  /* The action button while a photo is uploading. Width-driven progress
+   * bar (rendered as an inset <div> that grows from 0% to 100%) plus a
+   * percentage label. The bar is a child of the button so it lays out
+   * naturally without absolute positioning, and the percentage text
+   * sits on top via a higher z-index. */
+  function uploadProgress(pct){
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    return `<div style="position:relative;flex:1;height:38px;background:${C.well};border:1px solid ${C.line};overflow:hidden">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${p}%;background:linear-gradient(90deg,${C.ember} 0%,${C.sun} 100%);transition:width .15s ease-out"></div>
+      <div style="position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-family:${F.m};font-size:10px;letter-spacing:.16em;color:#fff">
+        <span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
+        UPLOADING… ${p}%
+      </div>
     </div>`;
   }
 
@@ -58,6 +78,7 @@ function viewAdminFleet(app){
         const sb=statusBadge(a.status);
         const specs=a.specs||{};
         const busy=String(app.s.photoBusyAssetId||'')===String(a.id);
+        const pct = busy ? (app.s.photoProgress || 0) : 0;
         return `<div style="background:${C.surf};border:1px solid ${C.line};padding:16px">
           <div style="display:flex;align-items:flex-start;gap:14px">
             ${photoThumb(a)}
@@ -80,10 +101,7 @@ function viewAdminFleet(app){
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
             ${busy
-              ?`<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;background:${C.well};border:1px solid ${C.line};font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.dim}">
-                <span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
-                UPLOADING PHOTO…
-              </div>`
+              ?uploadProgress(pct)
               :a.status==='available'?
               `<div class="press" data-act="flttoggle" data-id="${a.id}" data-to="maintenance" style="flex:1;text-align:center;padding:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);font-family:${F.m};font-size:10px;letter-spacing:.14em;color:${C.red}">SET OFFLINE</div>`:
               a.status==='maintenance'?
@@ -100,9 +118,10 @@ function viewAdminFleet(app){
 
     ${bottomBtn('+ ADD NEW BIKE','adminaddbike')}
 
-    <!-- Hidden file input reused for every card's "Change photo" action.
-         The asset id is stashed on the input by openCardPhotoPicker()
-         and read back in onCardPhotoChange(). -->
-    <input id="cardPhotoFileIn" type="file" accept="image/*" style="display:none" />
+    <!-- The per-card photo picker is now created on demand by
+         openCardPhotoPicker() in app.js (a fresh <input type="file">
+         built per click, with a one-shot change handler). No more
+         long-lived hidden input in the DOM, which avoids the
+         iOS WebView bug where the second pick silently does nothing. -->
   </div>`;
 }

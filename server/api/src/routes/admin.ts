@@ -3,8 +3,8 @@
  *  in-process bus (see ../bus.ts) so subscribed user panels see the change
  *  instantly without a refresh. */
 import crypto from 'crypto';
-import multer from 'multer';
-import { Router } from 'express';
+import multer, { MulterError } from 'multer';
+import { Router, type ErrorRequestHandler } from 'express';
 import { z } from 'zod';
 import { query } from '../db.js';
 import { asyncHandler, unauthorized, bad, notFound } from '../http.js';
@@ -14,7 +14,44 @@ import { env } from '../env.js';
 import { emit } from '../bus.js';
 import type { Request, Response, NextFunction } from 'express';
 
-const uploadMW = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+/* Multer config — 25 MB cap (up from 10 MB).
+ *
+ *   iPhone ProRAW and HEIC images of a bike in good light routinely
+ *   hit 12-18 MB, and admins sending screenshots from a Mac can be
+ *   20+ MB. 25 MB gives a comfortable margin while still preventing
+ *   abuse. The cap is enforced by multer, not by the admin app, so
+ *   even a malicious client with a faked `Content-Type` can't blow
+ *   up the server's memory.
+ *
+ *   `uploadErrorMW` below converts the raw `MulterError` (which would
+ *   otherwise come back as a 500 with a stack trace) into a clean
+ *   `413 FILE_TOO_LARGE` JSON, so the admin app's XHR helper can
+ *   show a proper "Image too large" message instead of "Request
+ *   failed (500)". */
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const uploadMW = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
+
+const uploadErrorMW: ErrorRequestHandler = (err, _req, res, next) => {
+  if (!err) { next(); return; }
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      // 25 MB exceeded — surface a clean JSON response with the
+      // 413 status code that the admin app's XHR helper recognises.
+      res.status(413).json({
+        message: `Image is too large. Maximum size is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`,
+        code: 'FILE_TOO_LARGE',
+        field: err.field,
+      });
+      return;
+    }
+    // Any other multer error (unexpected field, too many parts, etc.)
+    // becomes a 400 with a useful message.
+    res.status(400).json({ message: 'Upload failed: ' + err.message, code: err.code });
+    return;
+  }
+  // Not a multer error — pass through to the global error handler.
+  next(err);
+};
 
 export const adminRouter = Router();
 
@@ -118,6 +155,7 @@ adminRouter.post(
   '/fleet/upload-photo',
   requireAdmin,
   uploadMW.single('photo'),
+  uploadErrorMW,
   asyncHandler(async (req, res) => {
     if (!req.file) throw bad('No photo file.');
     const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
@@ -139,6 +177,7 @@ adminRouter.patch(
   '/fleet/:id/photo',
   requireAdmin,
   uploadMW.single('photo'),
+  uploadErrorMW,
   asyncHandler(async (req, res) => {
     if (!req.file) throw bad('No photo file.');
     const ext = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');

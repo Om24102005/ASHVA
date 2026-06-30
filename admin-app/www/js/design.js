@@ -30,16 +30,28 @@ function chevL(){return `<svg width="22" height="22" viewBox="0 0 24 24" fill="n
 
 function bgImg(photo,grad){return `background-image:url('${photo}'),${grad};background-size:cover,cover;background-position:center,center`;}
 
-/* ---- reusable chrome blocks ---- */
+/* ---- reusable chrome blocks ----
+ *
+ * With capacitor's `contentInset: 'never'` + body padding using
+ * `env(safe-area-inset-*)`, the body's own padding already clears the
+ * iOS status bar and home indicator. The topbar no longer needs a
+ * 46px magic-number top padding — it just needs a comfortable
+ * breathing space below the (now-edge-to-edge) header.
+ */
 function topbar(title,right){
-  return `<div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;height:96px;padding:46px 18px 0;background:linear-gradient(${C.base},rgba(23,17,13,.86) 70%,transparent)">
+  return `<div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;height:72px;padding:14px 18px 0;background:linear-gradient(${C.base},rgba(23,17,13,.86) 70%,transparent)">
     <div class="press" data-act="back" style="width:42px;height:42px;border:1px solid ${C.line};display:flex;align-items:center;justify-content:center;background:rgba(244,235,221,.04)">${chevL()}</div>
     <div style="font-family:${F.m};font-size:11px;letter-spacing:.22em;color:${C.dim};text-transform:uppercase">${title||''}</div>
     <div style="width:42px;height:42px;display:flex;align-items:center;justify-content:center">${right||''}</div>
   </div>`;
 }
 
+/* The body now applies the bottom safe-area inset globally, so the
+ * floating button only needs a comfortable 16px breathing room at the
+ * bottom. `env(safe-area-inset-bottom)` is left in place as a safety
+ * net in case some legacy screen renders this button before the body
+ * padding kicks in. */
 function bottomBtn(label,act,locked){
-  return `<div style="position:fixed;bottom:0;left:0;right:0;max-width:390px;margin:0 auto;padding:16px 24px calc(30px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#17110D 30%);z-index:35">
+  return `<div style="position:fixed;bottom:0;left:0;right:0;max-width:390px;margin:0 auto;padding:16px 24px calc(16px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#17110D 30%);z-index:35">
     <div class="press" data-act="${act}" style="text-align:center;padding:17px;background:${locked?'rgba(226,84,42,.25)':C.ember};color:${locked?'rgba(255,255,255,.4)':'#fff'};font-family:${F.m};font-size:12px;letter-spacing:.16em;pointer-events:${locked?'none':'auto'}">${label}</div></div>`;
 }

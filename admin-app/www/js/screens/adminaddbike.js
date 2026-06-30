@@ -1,10 +1,20 @@
 "use strict";
-/* SCREEN · Admin Add New Bike */
+/* SCREEN · Admin Add New Bike
+ *
+ * The bottom submit button doubles as the upload progress bar: when a
+ * photo is being uploaded (`app.s.photoBusyAssetId === 'add'`) the
+ * button morphs into a width-driven progress bar driven by the XHR's
+ * onprogress events. When the upload finishes the regular "ADD TO
+ * FLEET" flow continues (POST to /admin/fleet) without the admin
+ * needing to tap the button again.
+ */
 
 function viewAdminAddBike(app){
   const f=app.s.admin.addBike||{};
   const flash=app.s.flash;
   const preview=app.s.admin.photoPreview;
+  const uploading = app.s.photoBusyAssetId === 'add';
+  const pct = uploading ? (app.s.photoProgress || 0) : 0;
 
   const field=(id,label,placeholder,mode)=>`
     <div style="margin-bottom:14px">
@@ -12,6 +22,24 @@ function viewAdminAddBike(app){
       <input id="ab_${id}" inputmode="${mode||'text'}" placeholder="${placeholder}" value="${f[id]||''}"
         style="width:100%;box-sizing:border-box;background:${C.surf};border:1px solid ${C.line};padding:14px 16px;color:${C.ink};font-family:${F.g};font-size:15px;outline:none;-webkit-appearance:none">
     </div>`;
+
+  /* While a photo is uploading we render a progress bar instead of
+   * the static submit button. The bar is the same width as the bottom
+   * button slot so the layout doesn't jump. We still show "ADD TO
+   * FLEET" so the admin knows what's happening, with a percent
+   * suffix. After the upload completes the screen re-renders and the
+   * regular button reappears for the JSON POST. */
+  const submitArea = uploading
+    ? `<div style="position:fixed;bottom:0;left:0;right:0;max-width:390px;margin:0 auto;padding:16px 24px calc(16px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#17110D 30%);z-index:35">
+        <div style="position:relative;height:50px;background:${C.well};border:1px solid ${C.line};overflow:hidden">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:linear-gradient(90deg,${C.ember} 0%,${C.sun} 100%);transition:width .15s ease-out"></div>
+          <div style="position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-family:${F.m};font-size:11px;letter-spacing:.16em;color:#fff">
+            <span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></span>
+            UPLOADING PHOTO… ${pct}%
+          </div>
+        </div>
+      </div>`
+    : bottomBtn('ADD TO FLEET →','submitaddbike');
 
   return `<div style="padding-bottom:120px;background:${C.base}">
     ${topbar('ADD NEW BIKE')}
@@ -73,6 +101,6 @@ function viewAdminAddBike(app){
       ${field('photoUrl','PHOTO URL (optional — fallback if no upload)','https://images.unsplash.com/…')}
     </div>
 
-    ${bottomBtn('ADD TO FLEET →','submitaddbike')}
+    ${submitArea}
   </div>`;
 }

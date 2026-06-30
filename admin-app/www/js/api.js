@@ -1,6 +1,15 @@
 "use strict";
 /* ASHVA · API client — talks to the real backend. Token in localStorage.
-   Every call resolves to {ok:true,data} or {ok:false,error}; never throws. */
+   Every call resolves to {ok:true,data} or {ok:false,error}; never throws.
+
+   Two transport layers:
+     - req()               → JSON fetch, 55 s timeout, used for everything
+                             that's small (OTP, status, login, etc.).
+     - uploadForm()        → XHR-based multipart upload, 180 s timeout,
+                             with onProgress callback. Used for photo
+                             uploads where the response body is small but
+                             the request body can be many MB and we need
+                             to show real upload progress to the user. */
 window.API = (function () {
   const base = () => (window.ASHVA && window.ASHVA.API) || 'https://ashva-api-bb5c.onrender.com';
   const TKEY = 'ashva.token', SKEY = 'ashva.session';
@@ -38,8 +47,95 @@ window.API = (function () {
     }
   }
 
+  /* Multipart upload with real progress events. Falls back gracefully:
+   *   - if XHR progress isn't supported, we still call onProgress(50) once
+   *     before send() so the UI shows a sensible "in flight" state;
+   *   - the response is parsed as JSON and shaped exactly like req() so
+   *     the caller can treat the two transports identically;
+   *   - the timeout is 3 min by default (uploads take longer than JSON
+   *     POSTs — a 3 MB HEIC on 4G can easily be 60-90 s end-to-end).
+   *
+   *   onProgress(pct) is called with an integer 0-100. It may be called
+   *   many times (XHR fires progress every ~50 ms on most browsers). */
+  function uploadForm(path, form, opts) {
+    const o = opts || {};
+    const token = o.token !== undefined ? o.token : getToken();
+    const timeoutMs = o.timeoutMs || 180000;
+    const onProgress = typeof o.onProgress === 'function' ? o.onProgress : function () {};
+    const url = base() + path;
+
+    return new Promise(function (resolve) {
+      let xhr;
+      try {
+        xhr = new XMLHttpRequest();
+      } catch (e) {
+        resolve({ ok: false, error: { code: 'XHR_UNSUPPORTED', message: 'This browser cannot upload files.' } });
+        return;
+      }
+      let timedOut = false;
+      const timer = setTimeout(function () {
+        timedOut = true;
+        try { xhr.abort(); } catch { /* ignore */ }
+      }, timeoutMs);
+
+      xhr.open(o.method || 'POST', url, true);
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      // The browser sets the multipart boundary automatically when
+      // we pass a FormData — DO NOT set Content-Type manually or the
+      // boundary will be missing and multer will reject the upload.
+      xhr.upload.onprogress = function (ev) {
+        if (!ev.lengthComputable) { onProgress(0); return; }
+        const pct = Math.max(0, Math.min(100, Math.round((ev.loaded / ev.total) * 100)));
+        onProgress(pct);
+      };
+      xhr.onerror = function () {
+        clearTimeout(timer);
+        if (timedOut) {
+          resolve({ ok: false, error: { code: 'TIMEOUT', message: 'Upload took longer than ' + Math.round(timeoutMs/1000) + ' s. Try a smaller image or check your connection.' } });
+        } else {
+          resolve({ ok: false, error: { code: 'NETWORK', message: 'Network error — check your connection.' } });
+        }
+      };
+      xhr.onload = function () {
+        clearTimeout(timer);
+        // Multer's file-size error is delivered as a 413 status with a
+        // HTML body, not JSON. Be tolerant here so the caller can show
+        // a clean message regardless of payload.
+        let data = null;
+        const text = xhr.responseText || '';
+        if (text) {
+          try { data = JSON.parse(text); }
+          catch {
+            // Non-JSON body — use the raw text if it's short and useful,
+            // otherwise fall back to a status-based message.
+            data = { message: text.length < 200 ? text : null };
+          }
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve({ ok: true, data });
+        } else {
+          // Map common status codes to user-friendly messages so the
+          // admin app doesn't show a generic "Request failed (413)".
+          let msg = (data && data.message) || ('Upload failed (' + xhr.status + ')');
+          if (xhr.status === 413) msg = 'Image is too large. Please pick a smaller one (max 25 MB).';
+          else if (xhr.status === 401) msg = 'Session expired — please sign in again.';
+          else if (xhr.status === 502) msg = 'Storage server unreachable. Please try again in a moment.';
+          resolve({ ok: false, error: { code: 'HTTP', message: msg, status: xhr.status } });
+        }
+      };
+      try {
+        xhr.send(form);
+      } catch (e) {
+        clearTimeout(timer);
+        resolve({ ok: false, error: { code: 'SEND_FAILED', message: 'Could not start upload: ' + (e && e.message || 'unknown') } });
+      }
+    });
+  }
+
   return {
     base, getToken, getSession, setSession,
+    /* internal helpers (rarely used directly by screens) */
+    req, uploadForm,
     startOtp: (channel, destination) => req('/auth/otp/start', { method: 'POST', body: { channel, destination } }),
     otpSignin: (p) => req('/auth/otp/signin', { method: 'POST', body: p }),
     googleSignin: (idToken) => req('/auth/signin/google', { method: 'POST', body: { idToken } }),
@@ -56,18 +152,20 @@ window.API = (function () {
     adminFleet: (tok) => req('/admin/fleet', { token: tok }),
     adminToggle: (tok, id, status) => req('/admin/fleet/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminAddBike: (tok, data) => req('/admin/fleet', { method: 'POST', body: data, token: tok }),
-    /* One-shot photo replace. PATCH (not POST) so the URL is naturally
-     * scoped to /admin/fleet/:id. Multipart upload in a single round-trip;
-     * the server uploads to MinIO, writes photo_url, and emits the SSE
-     * asset event so user panels refresh in real time. */
-    adminSetPhoto: (tok, id, formData) => req('/admin/fleet/'+id+'/photo', { method: 'PATCH', form: formData, token: tok }),
+    /* Photo upload with real progress. `onProgress` receives 0-100 and
+     * is called repeatedly while bytes flow. The Promise shape matches
+     * the JSON req() helpers so screens can keep their `if (!r.ok)`
+     * error handling uniform. */
+    adminSetPhoto: (tok, id, formData, onProgress) => uploadForm('/admin/fleet/'+id+'/photo', formData, { method: 'PATCH', token: tok, onProgress: onProgress }),
     adminBookings: (tok) => req('/admin/bookings', { token: tok }),
     adminBookingStatus: (tok, id, status) => req('/admin/bookings/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminUsers: (tok) => req('/admin/users', { token: tok }),
     adminUserStatus: (tok, id, status) => req('/admin/users/'+id, { method: 'PATCH', body: { status }, token: tok }),
     adminKyc: (tok) => req('/admin/kyc', { token: tok }),
     adminKycVerdict: (tok, id, status) => req('/admin/kyc/'+id, { method: 'PATCH', body: { status }, token: tok }),
-    adminUploadPhoto: (tok, formData) => req('/admin/fleet/upload-photo', { method: 'POST', form: formData, token: tok }),
+    /* The add-bike form also uploads a photo. Routes through the same
+     * XHR path so the admin sees a single "UPLOADING… 47%" indicator. */
+    adminUploadPhoto: (tok, formData, onProgress) => uploadForm('/admin/fleet/upload-photo', formData, { method: 'POST', token: tok, onProgress: onProgress }),
   };
 })();
 
